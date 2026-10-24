@@ -1,3 +1,6 @@
+> **Team Tikitalia** — this is our team repo. Start from **[TEAM.md](TEAM.md)** (setup, data, layout, workflow).
+> Below is the official challenge README from Metrica Sports, merged from upstream.
+
 # More than a Hack 2027 — Phase 1: Ball Possession
 
 **Organised by [Metrica Sports](https://metrica-sports.com), [FC Barcelona](https://www.fcbarcelona.com)
