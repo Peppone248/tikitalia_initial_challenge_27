@@ -19,6 +19,10 @@ metro per decidere*. La vera decisione è quale combinazione dei due assi adotta
 > (RULES.md, "What remains fine": *pseudo-labels produced by an algorithm, provided no person
 > decided any of them*), a patto di rispettare i vincoli del §3.5. Dettaglio nel **§3**; nella
 > mappa delle strade corrisponde a **S1 + S4** (§4).
+>
+> Le regole in dettaglio (pseudocodice, parametri, confidenza, motore) sono in
+> [docs/REGOLE_PSEUDO_LABEL.md](docs/REGOLE_PSEUDO_LABEL.md): quel file è il riferimento aggiornato,
+> il catalogo del §3.3 qui sotto è la versione iniziale.
 
 > Fonti: RULES.md, CHALLENGE.md, DATA.md, EVALUATION.md, FAQ.md, SUBMISSION.md di questa repo,
 > più `cache/atd_columns.txt` e `cache/profile.txt` (output degli script in `scripts/`).
