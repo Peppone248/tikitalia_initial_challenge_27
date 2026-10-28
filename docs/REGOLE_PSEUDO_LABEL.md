@@ -1,11 +1,14 @@
-# Regole di pseudo-labelling — bozza v0.4
+# Regole di pseudo-labelling — bozza v0.5
 
 Bozza delle regole del motore di pseudo-etichettatura (H / A / D) per MTAH27 Phase 1.
 Owner: Beppe. Stato: **pseudocodice**, da tradurre nel motore in `src/tikitalia/rules/` (§12).
+Implementate finora: D-OUT, D-GOAL, rilevamento del calcio d'inizio, feature per frame (§2.3).
+Stato aggiornato: [STATO_LAVORI.md](STATO_LAVORI.md).
 
-Contesto e motivazioni: [POSSIBLE_PATHS.md](../POSSIBLE_PATHS.md) §3.
+Contesto e motivazioni: [POSSIBLE_PATHS.md](POSSIBLE_PATHS.md) §3.
 Termini (margine, rumore, forza, qualità, errore, …): [NOMENCLATURA.md](NOMENCLATURA.md).
 Esempi numerici di valutazione di una regola: [ESEMPI_VALUTAZIONE_REGOLE.md](ESEMPI_VALUTAZIONE_REGOLE.md).
+Feature per frame: [FEATURES.md](FEATURES.md). Motore: [MOTORE.md](MOTORE.md).
 
 | Versione | Modifiche |
 |---|---|
@@ -13,6 +16,7 @@ Esempi numerici di valutazione di una regola: [ESEMPI_VALUTAZIONE_REGOLE.md](ESE
 | v0.2 | §4 modello di confidenza (forza per attivazione + qualità per regola); §6.2 regole di cambio possesso (inversione della palla, intercetto, contrasto, inversione collettiva); §7 riprese più robuste (rimessa, barriera, ultimo tocco, consenso); §8 nuove regole Smart Tagging e affidabilità del tag; D-GOAL con goal annullato |
 | v0.3 | §4.1: forza calcolata per condizione (T è della condizione, la regola prende il minimo); qualità = precisione con prior Beta; definizione dell'errore per tipo di regola; calibrazione di `w = q · s`; tolleranza Δt per le TURNOVER. Nuovi `NOMENCLATURA.md` ed `ESEMPI_VALUTAZIONE_REGOLE.md` |
 | v0.4 | Dopo i primi test su BAR-ATH (D-OUT, D-GOAL, calcio d'inizio) e le proposte del team del 27/10: D-GOAL riscritta partendo dal calcio d'inizio (la palla in rete il tracking la vede poco; senza Z un tiro sopra la traversa sembra un goal); nuova D-SHOT (tiro che esce, anche con palla persa); D-WHISTLE con palla calciata via; D-GAP solo con rallentamento; D-KO e tempi dei calci d'inizio; R-GOALKICK e R-THROW più precise; §14 mappa delle proposte del team sulle regole |
+| v0.5 | §2.3 primitive implementate in `features.py`, con i nomi del codice (vecchio nome → nuovo); nuove `closing_speed` / `chase_speed` (distinte: la prima è ~0 in conduzione), `pressure_dist`, `v_forward`, rallentamento per squadra; §3 nuovi parametri `V_PLAYER_MAX`, `SIGMA_PLAYER_POS`, `TEMPO_MIN_PLAYERS`; §12 struttura del codice aggiornata; §13 σ sul pavimento anche per i giocatori. Nuovi `FEATURES.md`, `MOTORE.md`, `STATO_LAVORI.md` |
 
 ---
 
@@ -99,6 +103,28 @@ in_goal_mouth(p)            = (p.x < 0 or p.x > L) and |p.y - W/2| <= GOAL_HALF_
 
 ### 2.3 Primitive per frame (calcolate nel preprocessing, task Gio + Beppe)
 
+**v0.5 — implementate** in `src/tikitalia/features.py` (descrizione completa, formule e valori su
+BAR-ATH in [FEATURES.md](FEATURES.md)). Le regole le leggono da `context["features"]`. Il
+pseudocodice qui sotto resta come specifica originale; i nomi nel codice sono:
+
+| Pseudocodice | Codice | Note |
+|---|---|---|
+| `ball.pos`, `ball.vel`, `ball.speed`, `ball.still_for` | `match.ball_x/y`, `match.ball_vx/vy`, `match.ball_speed`, `match.ball_still_for` | in preprocessing |
+| `ball.acc`, `ball.missing_for` | `f.ball_acc`, `f.ball_missing_for` | |
+| `ball.last_seen_pos` | — | da aggiungere quando serve (D-SHOT) |
+| `players[team]` (vel) | `f.pvx`, `f.pvy`, `f.pspeed` | per slot; velocità > `V_PLAYER_MAX` = scambio di traccia → NaN |
+| `nearest[team]` | `f.nearest_dist`, `nearest_slot`, `nearest_x/y`, `nearest_vx/vy` | `(n, 2)` |
+| `nearest_team` | `f.nearest_team` (+ `f.nearest_gap`: quanto è conteso) | |
+| `n_within(team, r)` | `f.n_within(team, r)` | metodo: il raggio è della regola |
+| `|ball.vel − nearest.vel|`, `cos(ball.vel, nearest.vel)` | `f.rel_speed`, `f.align_cos` | per `control_episode`, P-DRIB |
+| — | `f.closing_speed`, `f.chase_speed` | nuove: distanza che si accorcia / corsa verso la palla (D-WHISTLE B) |
+| — | `f.pressure_dist` | nuova: portatore → avversario più vicino (P-FREE, T-TACKLE) |
+| `centroid[team]`, `spread[team]` | `f.centroid_fwd` (relativo ad `attack_dir`), `f.centroid_y`, `f.spread` | |
+| `n_in_opp_half`, `n_in_opp_box`, `n_in_own_box` | `f.n_opp_half`, `f.n_opp_box`, `f.n_own_box` | relativi ad `attack_dir` |
+| `v_team` (T-TEAMFLIP) | `f.v_forward` | |
+| `speed_med_all`, `speed_ref`, `collective_slowdown` | `f.speed_med`, `f.speed_ref`, `f.slowdown` | `(n, 3)`: H, A, tutti — D-WHISTLE chiede entrambe le squadre |
+| σ delle feature (§4.1) | `f.sigma` | posizione, distanza, velocità |
+
 ```text
 ball.visible                  # bool
 ball.pos, ball.vel, ball.speed, ball.acc      # NaN se non visibile; dopo pulizia dei salti
@@ -165,6 +191,9 @@ senza etichette). Nessun valore va regolato sulla GT pubblica.
 | `R_FREE_OPP` | 8 m | a priori | possesso non contestato: avversario più vicino lontano |
 | `T_PROG` | 3 s | a priori | progressione con palla al piede |
 | `REF_WIN` | 30 s | a priori | ritmo "normale" del tratto di gioco |
+| `V_PLAYER_MAX` | 12 m/s | a priori | oltre = scambio di traccia o salto, non uno sprint (in partita 10–11 m/s) |
+| `SIGMA_PLAYER_POS` | stimato | distribuzione | MAD del residuo posizione − media mobile, su tutte le tracce; su BAR-ATH finisce sul pavimento 0,10 m (§13) |
+| `TEMPO_MIN_PLAYERS` | 6 per squadra | a priori | sotto, la velocità mediana non è una misura collettiva |
 | `SLOWDOWN_RATIO` | 0,5 | a priori | dimezzamento collettivo della velocità = probabile fischio |
 | `T_GAP_LONG` | 10 s | distribuzione | `profile.txt`: i buchi > 10 s sono l'85% dei frame senza palla |
 | `T_STILL_RESTART` | 1 s | a priori | palla ferma prima di una ripresa |
@@ -976,26 +1005,34 @@ qualitativa ("il D inizia quando…"), **mai** come valori numerici da copiare n
 | §8 | Francesco | ST → frame, `Team` normalizzato, verifica fasi a coppie, sovrapposizioni |
 | §11 | Gio | risposte Q1–Q7 |
 
-### Struttura proposta del codice
+### Struttura del codice (v0.5: ✅ esiste · ⬜ da fare)
 
 ```text
 src/tikitalia/
-├─ preprocessing.py      # caricamento ATD/ST, metri, pulizia palla, velocità, attack_dir
-├─ features.py           # primitive §2.3 per frame (DataFrame colonnare, vettorizzato)
-├─ events.py             # control_episode, pass_event, restart_kick  (§2.4)
+├─ config/
+│  ├─ params.yaml        ✅ tabella §3: valore, unità, origine, motivazione (unica fonte delle soglie)
+│  ├─ rules.yaml         ✅ registro: classe, kind, scope, prior_q, parametri dichiarati
+│  └─ geometry.yaml      ✅ misure del campo
+├─ preprocessing.py      ✅ ATD/ST → Match in metri, pulizia palla, velocità della palla
+├─ geometry.py           ✅ Pitch: linee, porte, aree
+├─ features.py           ✅ primitive §2.3 per frame (array numpy, vettorizzato) — FEATURES.md
+├─ events.py             🟡 calcio d'inizio, attack_dir ✅ · control_episode, pass_event, restart_kick ⬜
 ├─ rules/
-│  ├─ base.py            # Rule(id, kind, scope, conf) → fires(features) -> Series[label|NaN]
-│  ├─ dead.py            # D-*
-│  ├─ possession.py      # P-*
-│  ├─ turnover.py        # T-* (§6.2)
-│  ├─ restart.py         # R-* + consenso
-│  └─ smart_tagging.py   # S-*
-├─ params.py             # tabella §3: nome, valore, origine, motivazione (unica fonte delle soglie)
-├─ engine.py             # aggregazione + inerzia (§9) → etichette per frame
-└─ report.py             # copertura / conflitti per regola, numero e durata dei possessi
+│  ├─ base.py            ✅ Rule / RuleOutput (label, strength, episodes)
+│  ├─ registry.py        ✅ classi registrate, istanziate da rules.yaml
+│  ├─ strength.py        ✅ z-score, saturazione, fattore di durata
+│  ├─ dead.py            🟡 D-OUT, D-GOAL ✅ · altre D ⬜
+│  ├─ possession.py      ⬜ P-*
+│  ├─ turnover.py        ⬜ T-* (§6.2)
+│  ├─ restart.py         ⬜ R-* + consenso
+│  └─ smart_tagging.py   ⬜ S-*
+├─ pipeline.py           ✅ config → Match → context (eventi + feature) → uscite delle regole
+├─ engine.py             ⬜ aggregazione + inerzia (§9) → etichette per frame — MOTORE.md
+├─ submission.py         ⬜ scrittura del CSV
+└─ report.py             🟡 report per D-OUT, D-GOAL
 ```
 
-Ogni regola è una funzione **vettorizzata** sul DataFrame delle feature (199k righe): niente loop
+Ogni regola è una funzione **vettorizzata** sugli array delle feature (199k righe): niente loop
 per frame in Python, salvo il passo di inerzia (o Numba).
 
 ### Test
@@ -1020,6 +1057,9 @@ per frame in Python, salvo il passo di inerzia (o Numba).
   precisione del sensore, non l'incertezza della condizione. Proposta: σ_i = max(σ sensore,
   tolleranza semantica a priori della condizione), es. ~2 m per "dentro l'area", ~1 m per
   "oltre la linea"; da decidere insieme e documentare in params.yaml.
+  v0.5: confermato dalle feature — anche σ dei giocatori stimato su BAR-ATH finisce sul pavimento
+  (0,10 m): il tracking corretto è già smussato e il "rumore del sensore" non è misurabile. Da
+  decidere **prima** della forza di P-DRIB / `control_episode` (FEATURES.md §4.7).
 
 ---
 

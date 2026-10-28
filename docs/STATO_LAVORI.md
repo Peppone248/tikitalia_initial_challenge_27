@@ -13,6 +13,8 @@ H/A + il motore v0. Vedi §8.
 
 Riferimenti: [REGOLE_PSEUDO_LABEL.md](REGOLE_PSEUDO_LABEL.md) (schede delle regole) ·
 [NOMENCLATURA.md](NOMENCLATURA.md) (termini; motore al §6) ·
+[MOTORE.md](MOTORE.md) (come funziona il motore) ·
+[FEATURES.md](FEATURES.md) (le misure per frame) ·
 [IMPROVEMENTS_DA_DISCUTERE.md](IMPROVEMENTS_DA_DISCUTERE.md) (proposte A1–B3).
 
 ---
@@ -30,15 +32,81 @@ Riferimenti: [REGOLE_PSEUDO_LABEL.md](REGOLE_PSEUDO_LABEL.md) (schede delle rego
 | Slot vuoti / duplicati / scambi di slot | 🟡 | Gio | `scripts/check_atd.py`; da riportare nel preprocessing |
 | Join ATD – Smart Tagging normalizzato (Team H/A/N/A, fasi a coppie) | ⬜ | Francesco | serve solo alle regole S-*; **non** blocca la v0 |
 
-## 2. Feature per frame — `features.py` (non esiste)
+## 2. Feature per frame — `features.py`
+
+Calcolate in `pipeline.build_context` → `context["features"]`. Test: `tests/test_features.py`
+(scenari sintetici). Controllo su BAR-ATH: `scripts/inspect_features.py` (solo aggregati).
+Spiegazione completa: [FEATURES.md](FEATURES.md). Controllo su BAR-ATH del 28/10: valori
+plausibili (registro).
 
 | Pezzo | Stato | Owner | Note |
 |---|---|---|---|
-| Giocatore più vicino per squadra: `nearest[team]` (dist, pos, vel) | ⬜ | | **blocca la v0** |
-| `nearest_team` | ⬜ | | **blocca la v0** |
-| `n_within(team, r)` | ⬜ | | |
-| Centroide, spread, giocatori in metà/area avversaria | ⬜ | | per P-SHAPE, R-SET |
-| `collective_slowdown` (velocità mediana vs riferimento mobile) | ⬜ | | per D-WHISTLE, D-GAP |
+✅ = testata su sintetico **e** quantili plausibili su BAR-ATH. 🟡 = il motivo è nella nota.
+
+| Pezzo | Stato | Owner | Note |
+|---|---|---|---|
+| Velocità dei giocatori (smussate, scambi di slot > `V_PLAYER_MAX` scartati) | ✅ | Beppe | passi scartati 0,11%; limite: non definita ai bordi delle tracce spezzate |
+| Giocatore più vicino per squadra: `nearest_*` (dist, slot, pos, vel) | ✅ | Beppe | mediana 1,91 m, coerente con `profile.txt`; rischio slot arbitri (ultima riga) |
+| `nearest_team`, `nearest_gap`, `n_within(team, r)` | ✅ | Beppe | gap mediano 3,5 m |
+| Palla–giocatore: `rel_speed`, `align_cos` | ✅ | Beppe | `rel_speed` mediana 3,7 m/s; `align_cos` non stampato ma dipende dalle stesse velocità |
+| Palla–giocatore: `closing_speed`, `chase_speed` | 🟡 | Beppe | solo sintetico: non ancora in `inspect_features.py` |
+| Pressione: `pressure_dist` (portatore → avversario più vicino) | ✅ | Beppe | mediana 5,1 m |
+| Palla: `ball_acc`, `ball_missing_for` | 🟡 | Beppe | solo sintetico; `ball_acc` serve per stimare `ACC_KICK` |
+| Forma: `n_visible`, `centroid_fwd`, `spread` | ✅ | Beppe | coerenti con `attack_dir` (casa più avanzata) |
+| Forma: `n_opp_half`, `n_opp_box`, `n_own_box`, `v_forward` | 🟡 | Beppe | solo sintetico |
+| Ritmo collettivo: `speed_med`, `speed_ref`, `slowdown` (H, A, tutti) | ✅ | Beppe | ≤ 0,5 sul 7,8%; limiti noti (§9): soste > `REF_WIN`, NaN sul ~5% |
+| Rumore: `SIGMA_PLAYER_POS`, σ di distanza e velocità | 🟡 | Beppe | **problema reale**: σ sul pavimento, non misura niente (REGOLE §13) |
+| Slot di arbitri / doppioni assegnati a una squadra | ⬜ | Gio | falsano `nearest_*` e conteggi; dipende dai controlli sugli slot |
+
+### 2.1 Da discutere — call di venerdì 30/10: σ e la forza delle regole
+
+Spiegazione completa con esempi: [FEATURES.md](FEATURES.md) §4.7.
+
+**Cos'è σ.** L'errore tipico di misura di una feature: di quanto "trema" la posizione del tracker
+tra un frame e l'altro. Si stima senza etichette: si smussa la traccia (media mobile di 5 frame),
+si prende il residuo grezza − smussata, se ne misura l'ampiezza tipica (1,4826 × MAD).
+
+**A cosa serve.** Alla forza di ogni condizione: `z = margine / σ`, forza = `min(1, z / 3)`. Una
+condizione soddisfatta di poco rispetto a σ è incerta, una soddisfatta di molto è sicura.
+
+**Il problema.** Su BAR-ATH σ stimato è sotto il pavimento `SIGMA_POS_FLOOR` = 0,10 m, sia per la
+palla sia per i giocatori, quindi vale sempre 0,10: non lo misuriamo, lo imponiamo. Il tracking
+che ci hanno dato è già corretto e smussato, il tremolio è stato tolto a monte. Conseguenze:
+1. **la forza non distingue**: con σ = 0,10 m (0,14 per una distanza palla–giocatore) bastano
+   40–50 cm di margine per saturare. D-OUT ha z mediano 32: quasi tutte le attivazioni hanno
+   forza 1, giuste o sbagliate;
+2. **è il rumore sbagliato**: il tracker dà il baricentro del giocatore, la palla è ai piedi
+   (30–80 cm), lo smoothing a monte può spostare tutto di decimetri senza tremolio visibile.
+   L'incertezza vera di "controlla la palla?" è dell'ordine del metro, non dei 10 cm del sensore.
+
+**Proposta** (REGOLE §13): per ogni condizione `σ_i = max(σ sensore, tolleranza semantica)`, con
+la tolleranza a priori e motivata in `params.yaml`.
+
+| Condizione | Tolleranza proposta | Perché |
+|---|---|---|
+| distanza giocatore–palla (controllo) | ~0,5 m | baricentro vs piedi, falcata |
+| palla oltre la linea | ~0,5–1 m | diametro della palla, smoothing vicino alle linee |
+| giocatore dentro l'area | ~2 m | posizioni a ridosso della linea dell'area |
+| velocità relativa palla–giocatore | ~1 m/s | tocchi a ogni passo in conduzione |
+
+Effetto, controllo con `R_CONTROL` = 1,5 m:
+
+| Distanza | Oggi (σ = 0,14 m) | Con tolleranza 0,5 m |
+|---|---|---|
+| 1,45 m | z 0,4 → forza 0,12 | z 0,1 → forza 0,03 |
+| 1,20 m | z 2,1 → forza 0,71 | z 0,6 → forza 0,20 |
+| 1,00 m | z 3,6 → forza 1 | z 1,0 → forza 0,33 |
+| 0,30 m | z 8,6 → forza 1 | z 2,4 → forza 0,80 |
+
+**Decisioni da prendere**
+- [ ] Adottiamo `σ_i = max(σ sensore, tolleranza semantica)`? Alternative: forza = 1 per le
+      regole dove lo z non informa; oppure stimare `p(z)` dalla calibrazione su altre partite
+      (M1, NOMENCLATURA §4) quando ci saranno.
+- [ ] Valori delle tolleranze: chi li propone, per quali condizioni (partire da quelle della v0:
+      distanza di controllo, velocità relativa, palla oltre la linea).
+- [ ] Va deciso **prima** di `control_episode` e P-DRIB, la cui forza dipende da questo.
+- [ ] Piccola modifica utile: stampare anche σ stimato **prima** del pavimento, per sapere quanto è
+      liscio il tracking (0,08 m o 0,005 m?) e scriverlo nel documento tecnico.
 
 ## 3. Eventi — `events.py`
 
@@ -151,7 +219,8 @@ Riferimenti: [REGOLE_PSEUDO_LABEL.md](REGOLE_PSEUDO_LABEL.md) (schede delle rego
 
 In ordine. Si spunta qui e si aggiorna la riga corrispondente sopra.
 
-- [ ] `features.py`: `nearest[team]`, `nearest_team`
+- [x] `features.py`: `nearest[team]`, `nearest_team` (+ tutte le altre del §2)
+- [x] `scripts/inspect_features.py` su BAR-ATH: valori plausibili (vedi registro 28/10)
 - [ ] `events.py`: `control_episode`, `restart_kick`
 - [ ] `emit()`: niente sovrapposizioni con etichette diverse
 - [ ] Regole: D-KO (emette D), D-HOLD, P-DRIB e/o P-FREE, R-TOUCH
@@ -166,6 +235,12 @@ In ordine. Si spunta qui e si aggiorna la riga corrispondente sopra.
 - D-OUT: uscite di 2 frame considerate D; serve la plausibilità dell'evento, non il margine
   geometrico.
 - Lo z-score con σ = rumore della palla satura sempre (D-OUT mediana 32): la forza non discrimina.
+  Confermato dalle feature: σ stimato di palla **e** giocatori finisce sul pavimento (0,10 m), il
+  tracking corretto è già smussato. Serve σ = max(sensore, tolleranza semantica) (REGOLE §13).
+- Velocità mediana dei giocatori non definita sul ~5% dei frame valutati, anche con ≥ 9
+  giocatori visibili: probabile frammentazione delle tracce (velocità NaN ai bordi o scartate).
+- `slowdown` > 2 sul 10% dei frame: dopo una sosta lunga il riferimento è basso e la ripresa
+  sembra un'accelerazione. Le regole leggono `slowdown < 1`, ma va tenuto presente.
 - Palla assente nel 41% dei frame valutati, proprio nelle situazioni contese: limite principale
   della v0 (IMPROVEMENTS B1, B2).
 - D-GOAL: un goal "no_candidate" (solo il calcio d'inizio) e due tag GOALS dello ST senza goal
@@ -178,3 +253,9 @@ In ordine. Si spunta qui e si aggiorna la riga corrispondente sopra.
 | Data | Chi | Cosa |
 |---|---|---|
 | 2026-10-28 | Beppe | creato il file; stato iniziale ricostruito dal codice locale al 27/10 |
+| 2026-10-28 | Beppe | aggiunto `docs/MOTORE.md` (descrizione del motore con esempi); prossimo passo: `features.py` |
+| 2026-10-28 | Beppe | `features.py` v1 + 4 parametri in `params.yaml` + `tests/test_features.py` (39/39 test ok, sintetici) + `scripts/inspect_features.py`; feature collegate in `build_context` |
+| 2026-10-28 | Beppe | `inspect_features.py` su BAR-ATH: 4,2 s; direzione d'attacco concorde tra calcio d'inizio e portiere in entrambi i tempi; passi > 12 m/s 0,11%; distanza mediana del più vicino 1,91 m; `slowdown` ≤ 0,5 sul 7,8% dei frame; σ sul pavimento (§9) |
+| 2026-10-28 | Beppe | docs: nuovo `FEATURES.md`; `REGOLE_PSEUDO_LABEL.md` v0.5 (§2.3 nomi del codice, §3 parametri, §12 struttura, §13 σ); `NOMENCLATURA.md` §7 feature; link a FEATURES in MOTORE, POSSIBLE_PATHS, STATO |
+| 2026-10-28 | Beppe | §2: stati delle feature aggiornati dopo il controllo su BAR-ATH (✅ quelle verificate; 🟡 solo σ e le feature non ancora stampate da `inspect_features.py`) |
+| 2026-10-28 | Beppe | §2.1: punto su σ preparato per la call di venerdì 30/10 (spiegazione, proposta, decisioni da prendere) |

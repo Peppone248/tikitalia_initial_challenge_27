@@ -2,7 +2,8 @@
 
 Riferimento per i termini usati in `REGOLE_PSEUDO_LABEL.md` (§4.1, §9) e in
 `ESEMPI_VALUTAZIONE_REGOLE.md`. In ogni voce: cosa è, a cosa si riferisce (regola, condizione o frame)
-e come si ottiene. I termini del motore (ancora, inerzia, stato) sono al §6.
+e come si ottiene. I termini del motore (ancora, inerzia, stato) sono al §6, quelli delle feature
+al §7 (spiegazione completa in `FEATURES.md`).
 
 ---
 
@@ -29,7 +30,8 @@ e come si ottiene. I termini del motore (ancora, inerzia, stato) sono al §6.
 
 **Feature** (`x_i`)
 : La grandezza misurata dal tracking su cui si basa una condizione: distanza palla–giocatore,
-  velocità della palla, numero di giocatori in area, ecc.
+  velocità della palla, numero di giocatori in area, ecc. È una misura, mai una decisione:
+  vedi §7.
 
 **Soglia** (`θ_i`)
 : Il valore con cui si confronta la feature. Ha un nome (es. `R_CONTROL`), un valore iniziale e
@@ -66,6 +68,10 @@ e come si ottiene. I termini del motore (ancora, inerzia, stato) sono al §6.
   - grandezze derivate (velocità, accelerazione, angoli di direzione): si stima sul residuo della
     grandezza derivata, che è più rumorosa della posizione;
   - conteggi (n giocatori, n passaggi): `σ = 1`.
+
+  Su BAR-ATH il σ stimato così finisce sul pavimento (`SIGMA_POS_FLOOR` = 0,10 m) sia per la palla
+  sia per i giocatori: il tracking è già smussato e il rumore del sensore non si vede. Aperto in
+  REGOLE §13: usare `σ = max(σ sensore, tolleranza semantica della condizione)`.
 
 **z-score** (`z_i`)
 : `z_i = m_i / σ_i`. Di quanti "errori di misura" il valore sta dentro la soglia. Con rumore circa
@@ -283,3 +289,55 @@ Da notare:
   un'evidenza che il motore registra senza cambiare lo stato;
 - il cambio a `A` si scopre a t = 7 (dopo `INERTIA_MIN`), ma si scrive da t = 6: senza
   retrodatazione la metrica punirebbe 1 s di ritardo su ogni cambio.
+
+---
+
+## 7. Feature, eventi e regole
+
+Spiegazione completa, formule e valori su BAR-ATH: `FEATURES.md`.
+
+**Feature** (strato)
+: Una misura per frame calcolata una sola volta da `features.py` e condivisa da tutte le regole.
+  Non contiene soglie né etichette: le uniche costanti sono finestre di calcolo e guardie di
+  validità, in `params.yaml`. NaN = non misurabile (mai zero).
+
+**Evento**
+: Un fatto con un inizio e una fine, ricavato applicando soglie alle feature nel tempo:
+  `control_episode` ("H controlla la palla da 1,3 s"), `pass_event`, `restart_kick`. Sta tra le
+  feature e le regole (`events.py`).
+
+**Esempio dei tre strati sullo stesso frame**
+: - feature: "il più vicino di H è a 0,8 m, `rel_speed` = 0,3 m/s";
+  - evento: "`control_episode` di H iniziato 1,3 s fa";
+  - regola: "P-DRIB emette H con forza 0,7".
+
+**Giocatore più vicino** (`nearest_*`)
+: Per ogni squadra, la traccia più vicina alla palla in quel frame, con distanza, posizione e
+  velocità. È un candidato portatore, non il portatore: lo diventa con un `control_episode`.
+
+**Gap** (`nearest_gap`)
+: Quanto l'altra squadra è più lontana dalla palla: `|d_H − d_A|`. Misura quanto il pallone è
+  conteso. Con un gap sotto il rumore della distanza, "chi è più vicino" lo decide il rumore.
+
+**Velocità relativa** (`rel_speed`) e **allineamento** (`align_cos`)
+: `|v_palla − v_giocatore|` e coseno tra le due velocità. Palla e giocatore che si muovono insieme
+  (relativa ~0, coseno ~1) = conduzione.
+
+**Velocità di chiusura** (`closing_speed`) e **di inseguimento** (`chase_speed`)
+: Due velocità "verso la palla" diverse, con `u` = versore giocatore → palla:
+  - chiusura: `(v_giocatore − v_palla) · u`, di quanto si accorcia la distanza. ~0 per chi conduce;
+  - inseguimento: `v_giocatore · u`, il massimo sulla squadra. Chi corre verso una palla più veloce
+    di lui insegue anche se la distanza cresce.
+
+**Pressione** (`pressure_dist`)
+: Distanza tra il giocatore più vicino alla palla e l'avversario più vicino a lui. L'unica distanza
+  giocatore–giocatore usata per il possesso.
+
+**Relativo alla direzione d'attacco** (`fwd`)
+: `fwd = (x − L/2) · attack_dir`: > 0 vuol dire "nella metà della porta che la squadra attacca",
+  in entrambi i tempi. Base di `centroid_fwd`, `n_opp_half`, aree, `v_forward`.
+
+**Rallentamento collettivo** (`slowdown`)
+: Velocità mediana dei giocatori diviso il suo riferimento (mediana degli ultimi `REF_WIN` s), per
+  H, A e tutti. < 1 = più lenti del solito. Indica l'**inizio** di una sosta, non la sua durata:
+  nelle soste più lunghe di `REF_WIN` anche il riferimento scende e il rapporto torna verso 1.

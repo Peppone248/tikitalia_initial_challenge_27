@@ -118,6 +118,11 @@ Smart Tagging ──► intervalli → frame, mappatura code→lato ────
 
 **2. Feature per frame** (bozza, da estendere)
 
+> Aggiornamento 28/10: le feature di prossimità, forma e ritmo sono implementate in
+> `src/tikitalia/features.py`. Descrizione, formule e valori su BAR-ATH: [FEATURES.md](FEATURES.md).
+> Le feature Smart Tagging e di contesto restano da fare (le prime con il join ATD–ST, le seconde
+> nel motore). La tabella qui sotto è la bozza iniziale.
+
 | Gruppo | Feature |
 |---|---|
 | Palla | visibile sì/no; x, y; velocità e accelerazione derivate; ferma da N frame; fuori campo; vicino a una linea; in area; distanza dal centro del campo; tempo dall'ultimo frame visibile |
