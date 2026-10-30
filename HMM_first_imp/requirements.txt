@@ -1,0 +1,7 @@
+# HMM_first_imp: numpy + PyYAML only (no ML framework: the NN is plain numpy, so the CSV is
+# reproducible). pandas is needed by evaluation/ (validator, scorer), as in the repo root.
+# Pin the exact versions of your machine after the first run (pip freeze) so that the file can
+# be regenerated bit for bit (RULES.md 3).
+numpy>=1.24
+PyYAML>=6.0
+pandas>=1.5

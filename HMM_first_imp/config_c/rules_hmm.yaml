@@ -1,0 +1,180 @@
+# Rule registry of HMM_first_imp. Which rules run, what they are, which parameters they read.
+#
+#   class    module.ClassName in hmm_v0/rules/  |  team.<module>.<Class> for the team rules
+#   kind     ANCHOR | SOFT | RESTART           (REGOLE 4; TURNOVER rules: not in v0)
+#   scope    OPEN_PLAY: the vote is ignored where a D anchor is active (engine)
+#            DEAD | ANY
+#   stage    1 = runs first; 2 = reads the outputs of stage 1 (D-HOLD)
+#   prior_q  quality of the rule = expected precision (prior, REGOLE 4.1). Vote weight w = q * s
+#   params   names in params.yaml / params_hmm.yaml -- a rule may read nothing else
+#   options  non-threshold settings (code lists, scales)
+#   correlated_with   rules sharing features (documentation, for the future label model)
+
+# -- D (dead ball) ------------------------------------------------------------------------------
+D-OUT:
+  class: team.dead.BallOut
+  kind: ANCHOR
+  scope: ANY
+  stage: 1
+  prior_q: 0.95
+  params: [OUT_MARGIN, T_MIN_OUT, MERGE_GAP, Z_SAT, SIGMA_POS, ST_MATCH_WIN]
+  correlated_with: [D-GOAL, D-HOLD]
+D-GOAL:
+  class: team.dead.Goal
+  kind: ANCHOR
+  scope: ANY
+  stage: 1
+  prior_q: 0.90
+  params: [OUT_MARGIN, GOAL_TOL, T_GAP_LOST, T_GOAL_KO, T_GOAL_CLUSTER, T_SHOT_EXTRAP,
+           SIGMA_EXTRAP_GROWTH, ST_GOAL_WIN, Z_SAT, SIGMA_POS, W_SRC_LOST_SHOT, W_SRC_LOST_BOX,
+           W_SRC_NONE, W_NO_ST, W_NO_ST_KO]
+  correlated_with: [D-OUT, D-KO]
+D-KO:
+  class: dead_extra.KickOffDead
+  kind: ANCHOR
+  scope: ANY
+  stage: 1
+  prior_q: 0.95
+  params: []
+  options: {taper_s: 1.0, end_strength: 0.3, no_st_factor: 0.8}
+  correlated_with: [D-GOAL, R-KO]
+D-SP:
+  class: dead_extra.SetPiece
+  kind: ANCHOR
+  scope: ANY
+  stage: 1
+  prior_q: 0.90
+  params: [T_STILL_RESTART]
+  correlated_with: [D-STILL, D-OUT]
+# v1: ANCHOR once confirmed (ball still or nobody touching it); it opens the D, D-HOLD keeps it
+D-WHISTLE:
+  class: dead_extra.Whistle
+  kind: ANCHOR
+  scope: ANY
+  stage: 1
+  prior_q: 0.70
+  params: [SLOWDOWN_RATIO, SLOWDOWN_RATIO_BOTH, T_WHISTLE_MIN, T_WHISTLE_CONFIRM, T_STILL_RESTART,
+           Z_SAT]
+  correlated_with: [D-GAP, D-STILL, D-HOLD]
+D-GAP:
+  class: dead_extra.LongGap
+  kind: SOFT
+  scope: ANY
+  stage: 1
+  prior_q: 0.50
+  params: [T_GAP_LONG, SLOWDOWN_RATIO, REF_WIN, Z_SAT]
+  correlated_with: [D-WHISTLE, X-NOBALL]
+D-STILL:
+  class: dead_extra.StillBall
+  kind: SOFT
+  scope: ANY
+  stage: 1
+  prior_q: 0.55
+  params: [T_STILL_DEAD, Z_SAT]
+  correlated_with: [D-SP, D-WHISTLE]
+# kind ANCHOR: the D of a ball out lasts until the restart (REGOLE D-OUT span "until the
+# restart_kick, see D-HOLD"); D-HOLD is that part of the span. Its strength decays (decay_s)
+# so that a restart the detector missed cannot freeze a long D.
+D-HOLD:
+  class: dead_extra.DeadHold
+  kind: ANCHOR
+  scope: ANY
+  stage: 2
+  prior_q: 0.75
+  params: [T_HOLD_MAX, T_CONTROL, SLOWDOWN_RATIO]
+  options: {strength: 0.8, decay_s: 30.0, after: [D-OUT, D-GOAL, D-WHISTLE]}
+  correlated_with: [D-OUT, D-GOAL]
+
+# -- H/A (possession) ---------------------------------------------------------------------------
+P-DRIB:
+  class: possession.Dribble
+  kind: ANCHOR
+  scope: OPEN_PLAY
+  stage: 1
+  prior_q: 0.85
+  params: [T_CONTROL, Z_SAT]
+  correlated_with: [P-FREE, P-PASS]
+P-FREE:
+  class: possession.FreeBall
+  kind: ANCHOR
+  scope: OPEN_PLAY
+  stage: 1
+  prior_q: 0.85
+  params: [R_CONTROL, R_FREE_OPP, V_PASS, T_CONTROL, Z_SAT]
+  correlated_with: [P-DRIB]
+P-PASS:
+  class: possession.PassChain
+  kind: ANCHOR
+  scope: OPEN_PLAY
+  stage: 1
+  prior_q: 0.90
+  params: [N_PASS_ANCHOR, Z_SAT]
+  correlated_with: [P-DRIB]
+P-SHAPE:
+  class: possession.ShapeOpen
+  kind: SOFT
+  scope: OPEN_PLAY
+  stage: 1
+  prior_q: 0.45
+  params: []
+  options: {w_half: 1.0, w_vfwd: 1.0, scale: 4.0, min_players: 7}
+S-PHASE:
+  class: possession.SmartTaggingPhase
+  kind: SOFT
+  scope: OPEN_PLAY
+  stage: 1
+  prior_q: 0.50
+  inputs: [ST]
+  params: []
+  options:
+    possession_codes: [BUILD UP, PROGRESSION, CREATING CHANCES, ATTACKING TRANSITION,
+                       BALL IN FINAL THIRD, BALL IN THE BOX, LONG BALL]
+    defending_codes: [DEFENDING IN DEFENSIVE THIRD, DEFENDING IN MIDDLE THIRD,
+                      DEFENDING IN ATTACKING THIRD, DEFENSIVE TRANSITION]
+
+# -- RESTART ------------------------------------------------------------------------------------
+R-TOUCH:
+  class: restart.RestartTouch
+  kind: RESTART
+  scope: ANY
+  stage: 1
+  prior_q: 0.80
+  params: [T_RESTART_LOOKBACK, T_RESTART_SPAN]
+R-KO:
+  class: restart.RestartKickOff
+  kind: RESTART
+  scope: ANY
+  stage: 1
+  prior_q: 0.95
+  params: [T_RESTART_SPAN]
+  correlated_with: [D-KO]
+
+# -- TURNOVER (REGOLE 6.2): when the ball changes team, confirmed by a control ----------------
+T-INTERCEPT:
+  class: turnover.Intercept
+  kind: TURNOVER
+  scope: OPEN_PLAY
+  stage: 1
+  prior_q: 0.75
+  params: [T_PASS_MAX, T_CONTROL, T_TURN_SPAN, Z_SAT]
+  correlated_with: [P-DRIB, P-PASS]
+T-REV:
+  class: turnover.Reversal
+  kind: TURNOVER
+  scope: OPEN_PLAY
+  stage: 1
+  prior_q: 0.65
+  params: [ANGLE_REV, T_REV_WIN, V_REV_MIN, R_CONTROL, T_PASS_MAX, T_TURN_CONFIRM, T_TURN_SPAN,
+           Z_SAT]
+  correlated_with: [T-INTERCEPT]
+
+# -- X (unobservable) ---------------------------------------------------------------------------
+# kind ANCHOR: "the ball is not tracked" is an observed FACT about the frame, not an opinion on
+# the possession; the observation model (hmm.yaml omega) makes X compatible with XH, XA and D.
+X-NOBALL:
+  class: noball.NoBall
+  kind: ANCHOR
+  scope: ANY
+  stage: 1
+  prior_q: 0.80
+  params: [T_X_MIN]

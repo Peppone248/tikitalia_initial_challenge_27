@@ -1,0 +1,143 @@
+# MOTORE of HMM_first_imp: noise model, votes, pseudo-labels, light NN, Bakis HMM.
+# Every value is a priori (no tuning on the public ground truth, RULES.md 2); the reason is
+# next to it. Change them here, not in the code.
+
+# -- noise ("rumore", NOMENCLATURA 2) used in z = margin / sigma -------------------------------
+noise:
+  # std | mad | mad_tol. 'mad' chosen by scripts/eval_sigma_synthetic.py (REPORT 3):
+  # MAD beats the previous definition (std of the residual) in 7/7 synthetic scenarios on the
+  # sigma error, on the stability under outliers and on the Brier score of Phi(z).
+  mode: mad
+  window: 5                    # frames of the moving average (= SMOOTH_WIN)
+  # tol: semantic tolerance (used only by mode mad_tol, STATO_LAVORI 2.1)
+  # floor: guard against sigma = 0 on a frozen signal
+  features:
+    ball_pos:      {tol: 0.5,  floor: 0.01, unit: m}
+    dist_outside:  {tol: 0.75, floor: 0.01, unit: m}
+    ball_speed:    {tol: 1.0,  floor: 0.05, unit: m/s}
+    nearest_dist:  {tol: 0.5,  floor: 0.01, unit: m}
+    rel_speed:     {tol: 1.0,  floor: 0.05, unit: m/s}
+    pressure_dist: {tol: 1.0,  floor: 0.01, unit: m}
+    align_cos:     {tol: 0.1,  floor: 0.01, unit: cos}
+    slowdown:      {tol: 0.1,  floor: 0.01, unit: ratio}
+
+# -- votes: w = q * s -> evidence in nats -------------------------------------------------------
+votes:
+  # a vote with weight w is read as a voter right with probability p = 1/K + (1 - 1/K) * w
+  # (w = 0: chance; w = 1: certain), K = 4 classes H, A, D, X. Its evidence for the voted class
+  # is the optimal log-odds weight ln((K-1) p / (1 - p)) (NOMENCLATURA 4), p capped at p_max.
+  p_max: 0.99
+  # context DEAD = some D rule votes with w >= conf_dead_context; there the OPEN_PLAY rules
+  # (P-*, S-PHASE) do not vote (REGOLE 6: H/A rules only in OPEN_PLAY)
+  conf_dead_context: 0.5
+  # report only: a vote with w >= conf_anchor counts as an anchor in the agreement table
+  conf_anchor: 0.5
+  # SOFT rules vote continuously (P-SHAPE on ~90% of the frames): their per-frame votes are
+  # autocorrelated over seconds, so summed frame by frame they would outvote any ANCHOR.
+  # Scaled down a priori; they fill gaps and break ties (REGOLE 6: a change sustained only by
+  # SOFT votes is not accepted).
+  kind_scale: {ANCHOR: 1.0, RESTART: 1.0, SOFT: 0.25, TURNOVER: 1.0}
+
+# -- pseudo-labels: the NN targets, from the rules only ------------------------------------------
+pseudo_labels:
+  min_margin: 1.5              # nats between the best and the second class of the rule evidence
+  min_evidence: 1.0            # nats of the best class
+
+# -- light NN: P(H, A, D, X | frame window) -----------------------------------------------------
+nn:
+  # rf  = random-feature network: 1 hidden layer with fixed random weights + trained softmax
+  #       output, CONVEX training (full-batch GD): a tiny input difference on another machine
+  #       stays tiny -> the same CSV everywhere (RULES 3). Default since v1.
+  # mlp = 2 trained hidden layers, minibatch Adam: chaotic training, a 2^-16 change on 10 inputs
+  #       changed 1,896 output frames (REPORT_HMM_v1).
+  model: rf
+  rf_hidden: 192
+  rf_l2: 0.0001
+  rf_iters: 400
+  context_frames: 2            # concatenate t-2 .. t+2 (tip: adjacent frames in one vector)
+  hidden: [48, 24]
+  epochs: 6
+  batch_size: 512
+  learning_rate: 0.002
+  l2: 0.0001
+  max_train_frames: 50000      # stratified subsample per class (speed, RAM); all frames are predicted
+  class_balance: true          # weight classes 1 / frequency
+  swap_augment: true           # add every frame with home/away swapped (H <-> A): symmetry
+  seed: 27
+  # cross-machine reproducibility (RULES 3, exact.py): integer matrix products + polynomial exp
+  # + quantised inputs, so the training is identical on every CPU / BLAS; probabilities rounded
+  exact_arithmetic: true
+  output_decimals: 3
+
+# -- HMM: hidden states, Bakis topology, transitions, emissions ---------------------------------
+hmm:
+  # XH / XA = the team still has the ball but the ball is not tracked (the 'X' of the NN).
+  # Output label: XH -> H, XA -> A (never X on a graded frame, IMPROVEMENTS A1).
+  states: [H, A, D, XH, XA]
+  output_label: {H: H, A: A, D: D, XH: H, XA: A}
+  # Bakis (left-to-right) chain per state: n = round(min_duration_s * fps) sub-states, each
+  # i -> i (inner_self_loop) or i -> i+1; the last one loops and is the only exit. A state is
+  # therefore held for at least min_duration_s: no 1-frame possessions (spellF1).
+  # D: 2 s, a priori: no restart takes less (the ball is retrieved, placed, played); a shorter
+  # "D" between two spells of the same team would only cut one possession in two (H D H).
+  min_duration_s: {H: 0.8, A: 0.8, D: 2.0, XH: 0.04, XA: 0.04}
+  inner_self_loop: 0.0
+  # Transitions from the last sub-state, as the MEAN TIME (s) before that jump if it were the only
+  # one: p = 1 / (mean_time_s * fps) per frame; the self-loop takes the rest. Missing pairs =
+  # forbidden. A priori: ~1 change of possession every ~20 s of live play; ~1 stoppage every
+  # ~30 s; stoppages last ~20-60 s; a change while the ball is unseen is rarer than a seen one.
+  # auto_visible / auto_missing (origin: distribution, no labels): mean length of the stretches
+  # where the ball is tracked / not tracked on the graded frames of the game (~23 s / ~16 s on
+  # BAR-ATH) -- how often the tracker loses and finds the ball.
+  mean_time_s:
+    H:  {A: 20.0, XA: 200.0, D: 30.0, XH: auto_visible}
+    A:  {H: 20.0, XH: 200.0, D: 30.0, XA: auto_visible}
+    XH: {H: auto_missing, A: 20.0, XA: 60.0, D: 30.0}
+    XA: {A: auto_missing, H: 20.0, XH: 60.0, D: 30.0}
+    D:  {H: 60.0, A: 60.0, XH: 120.0, XA: 120.0}
+  # D -> H/A needs a restart (throw-in, kick-off, free kick): at the frames of a detected restart
+  # (+- window_s) the D exits are multiplied by `boost` (time-varying transitions)
+  restart: {boost: 50.0, window_s: 0.5}
+  # v1 -- only the rules change the team. A change TO a team (A/XA -> H/XH and back) keeps its
+  # base rate only in [start - window_pre_s, start + window_post_s] of an episode of `sources`
+  # (a control, a pass chain, a turnover, a restart of that team); elsewhere its probability is
+  # divided by closed_factor (~3 nats more). MOTORE.md: "solo le ANCHOR cambiano lo stato";
+  # v0 diagnostics: 78 of 114 short possessions had no control rule behind them.
+  team_change:
+    gate: true
+    closed_factor: 20.0
+    window_pre_s: 0.5
+    window_post_s: 1.0
+    sources: [P-DRIB, P-FREE, P-PASS, T-INTERCEPT, T-REV, R-TOUCH, R-KO]
+  # Observation model: hidden state -> probability of each observation class (H, A, D, X)
+  # (rows normalised). One matrix per source, because X does not mean the same for the two:
+  #  omega_rules: X = X-NOBALL, "ball not tracked", UNINFORMATIVE between an unseen possession
+  #               (XH, XA) and an unseen stoppage (D): same weight 0.8 in the three rows. They
+  #               are told apart by D vs team evidence (0.2 each) and by the transitions.
+  #  omega_nn:    X = "ball not seen and no sign of stoppage or team" (pseudo_labels.py): it
+  #               points to XH / XA; D is recognised by the NN's own D class.
+  # XH keeps 0.2 on H: team evidence still says WHO has the ball while nobody sees it.
+  # log b(m) = alpha_nn * log sum_c omega_nn[m,c] P_nn(c)/prior(c) + beta_rules * log sum_c omega_rules[m,c] e^E(c)
+  # alpha, beta = 1 / (2 * context_frames + 1): consecutive frames are not independent evidence
+  # (25 fps, overlapping windows), about one independent observation per window.
+  emission:
+    alpha_nn: 0.2
+    beta_rules: 0.2
+    omega_rules:
+      H:  {H: 0.95, X: 0.05}
+      A:  {A: 0.95, X: 0.05}
+      D:  {D: 0.2, X: 0.8}
+      XH: {X: 0.8, H: 0.2}
+      XA: {X: 0.8, A: 0.2}
+    # v1: the NN says alive (H or A) / dead / unseen, NOT which team: its H and A classes count
+    # the same for both teams (v0: the NN alone flipped the team in short visible spells).
+    omega_nn:
+      H:  {H: 0.475, A: 0.475, X: 0.05}
+      A:  {H: 0.475, A: 0.475, X: 0.05}
+      D:  {D: 0.95, X: 0.05}
+      XH: {X: 0.8, H: 0.1, A: 0.1}
+      XA: {X: 0.8, H: 0.1, A: 0.1}
+  initial: {H: 0.2, A: 0.2, D: 0.4, XH: 0.1, XA: 0.1}
+  # emissions and log-transitions on a 2^-20 grid: every Viterbi sum is exact, so ulp
+  # differences of log / exp between machines cannot flip a decision (exact.py)
+  log_grid_bits: 20

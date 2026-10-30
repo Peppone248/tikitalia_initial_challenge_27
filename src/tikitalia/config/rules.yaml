@@ -1,0 +1,33 @@
+# Rule registry. Which rules exist, what they are and which parameters they read.
+# The logic lives in the class; this file decides what runs and with what.
+#
+#   class            module.ClassName under tikitalia.rules
+#   kind             ANCHOR | SOFT | RESTART | TURNOVER
+#   scope            OPEN_PLAY | DEAD | ANY
+#   inputs           ATD | ST
+#   prior_q          prior quality of the rule (docs/REGOLE_PSEUDO_LABEL.md 4.1), replaced later
+#                    by the label-model estimate and by M1 precision
+#   params           names in params.yaml -- a rule may read nothing else
+#   correlated_with  rules sharing the same features (for the label model)
+
+D-OUT:
+  class: dead.BallOut
+  kind: ANCHOR
+  scope: ANY
+  inputs: [ATD]
+  prior_q: 0.95
+  params: [OUT_MARGIN, T_MIN_OUT, MERGE_GAP, Z_SAT, SIGMA_POS, ST_MATCH_WIN]
+  correlated_with: [D-GOAL]
+  enabled: true
+
+D-GOAL:
+  class: dead.Goal
+  kind: ANCHOR
+  scope: ANY
+  inputs: [ATD, ST]
+  prior_q: 0.90
+  params: [OUT_MARGIN, GOAL_TOL, T_GAP_LOST, T_GOAL_KO, T_GOAL_CLUSTER, T_SHOT_EXTRAP,
+           SIGMA_EXTRAP_GROWTH, ST_GOAL_WIN, Z_SAT, SIGMA_POS, W_SRC_LOST_SHOT, W_SRC_LOST_BOX,
+           W_SRC_NONE, W_NO_ST, W_NO_ST_KO]
+  correlated_with: [D-OUT]
+  enabled: true

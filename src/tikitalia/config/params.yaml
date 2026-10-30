@@ -1,0 +1,220 @@
+# Thresholds of the rules. Single source of truth: no rule hard-codes a number.
+#
+# Every entry has:
+#   value   the number (null when it is estimated at run time)
+#   unit
+#   origin  a_priori      fixed in advance, with a football / physical reason
+#           distribution  estimated from the data WITHOUT labels (deterministic estimator)
+#   why     the reason, in one line -- it ends up in the technical document
+#
+# Never tune a value on the public ground truth or on specific moments of BAR-ATH
+# (RULES.md 1-2, docs/REGOLE_PSEUDO_LABEL.md 1). Any change goes in the changelog of the rules doc.
+
+# -- preprocessing ------------------------------------------------------------------------------
+V_JUMP:
+  value: 40.0
+  unit: m/s
+  origin: a_priori
+  why: "faster than any kick: an isolated point at this speed from both neighbours is a tracker jump"
+SMOOTH_WIN:
+  value: 5
+  unit: frames
+  origin: a_priori
+  why: "0.2 s centred moving average on the ball before differentiating"
+SIGMA_POS:
+  value: null
+  unit: m
+  origin: distribution
+  why: "ball position jitter: robust std (MAD) of raw minus smoothed position on visible stretches"
+  estimator: "1.4826 * MAD(residual), residual = raw - moving_average(SMOOTH_WIN)"
+SIGMA_POS_FLOOR:
+  value: 0.10
+  unit: m
+  origin: a_priori
+  why: "lower bound so that a very clean track does not make every z-score explode"
+V_BALL_STILL:
+  value: 0.5
+  unit: m/s
+  origin: a_priori
+  why: "ball at rest (placed for a restart)"
+
+# -- features (features.py) -------------------------------------------------------------------
+V_PLAYER_MAX:
+  value: 12.0
+  unit: m/s
+  origin: a_priori
+  why: "top sprint speeds in football are ~10-11 m/s (human record ~12.4): a faster step of a slot is a tracker swap or jump, its velocity is dropped"
+SIGMA_PLAYER_POS:
+  value: null
+  unit: m
+  origin: distribution
+  why: "player position jitter: robust std (MAD) of raw minus smoothed position, pooled over all slots"
+  estimator: "1.4826 * MAD(residual), residual = raw - moving_average(SMOOTH_WIN), floor SIGMA_POS_FLOOR"
+REF_WIN:
+  value: 30.0
+  unit: s
+  origin: a_priori
+  why: "reference tempo of play = median player speed over the last half minute"
+TEMPO_MIN_PLAYERS:
+  value: 6
+  unit: players
+  origin: a_priori
+  why: "a median speed over fewer tracked players (per team) is not a collective measure: NaN below this"
+
+# -- strength (docs/REGOLE_PSEUDO_LABEL.md 4.1) -------------------------------------------------
+Z_SAT:
+  value: 3.0
+  unit: sigma
+  origin: a_priori
+  why: "a margin of 3 sigma over the threshold is treated as certain"
+
+# -- D-OUT ----------------------------------------------------------------------------------------
+OUT_MARGIN:
+  value: 0.5
+  unit: m
+  origin: a_priori
+  why: "tolerance on the lines for tracking noise and for the ball diameter"
+T_MIN_OUT:
+  value: 0.2
+  unit: s
+  origin: a_priori
+  why: "an excursion shorter than this is more likely jitter than a ball out of play"
+MERGE_GAP:
+  value: 0.4
+  unit: s
+  origin: a_priori
+  why: "two out-of-pitch stretches separated by less than this are one episode"
+ST_MATCH_WIN:
+  value: 60.0
+  unit: s
+  origin: a_priori
+  why: "a restart follows a ball out within a minute; used only to check coherence with Smart Tagging"
+
+# -- kick-off detection (events.kickoffs) ---------------------------------------------------------
+KO_CENTRE_R:
+  value: 1.5
+  unit: m
+  origin: a_priori
+  why: "ball on the centre spot, plus tracking error"
+KO_MIN_PLAYERS:
+  value: 7
+  unit: players
+  origin: a_priori
+  why: "enough visible players per team to trust the 'everyone in their own half' check"
+KO_MAX_WRONG_SIDE:
+  value: 1
+  unit: players
+  origin: a_priori
+  why: "Laws: everyone in their own half; one exception allowed for tracking noise / duplicates"
+KO_KICKER_R:
+  value: 3.0
+  unit: m
+  origin: a_priori
+  why: "Laws 8: the kicker stands at the ball on the centre spot; 3 m covers tracking error"
+KO_CIRCLE_TOL:
+  value: 1.0
+  unit: m
+  origin: a_priori
+  why: "Laws 8: opponents outside the centre circle (9.15 m) until the kick; tolerance for noise"
+KO_MAX_INTRUDERS:
+  value: 1
+  unit: players
+  origin: a_priori
+  why: "one non-kicking player inside the circle tolerated: referee or tracker duplicate assigned to a team (46 slots for 22 players); same tolerance as KO_MAX_WRONG_SIDE"
+KO_HALF_START_WIN:
+  value: 300.0
+  unit: s
+  origin: a_priori
+  why: "the kick-off that starts a half comes within minutes of the half's first graded frame; a later one follows a goal"
+KO_AFTER_WIN:
+  value: 5.0
+  unit: s
+  origin: a_priori
+  why: "where the ball is first seen after a kick-off formation breaks: near the centre if the kick-off was played"
+T_KO_SETUP:
+  value: 2.0
+  unit: s
+  origin: a_priori
+  why: "kick-off set-up lasts seconds; shorter matches of the pattern are transient"
+KO_LINE_TOL:
+  value: 1.0
+  unit: m
+  origin: a_priori
+  why: "players within this distance of the halfway line count for neither side"
+T_STILL_RESTART:
+  value: 1.0
+  unit: s
+  origin: a_priori
+  why: "ball held still before a restart"
+T_KICK_SEARCH:
+  value: 3.0
+  unit: s
+  origin: a_priori
+  why: "after the set-up, the kick is the first ball movement within this window"
+K_DIR:
+  value: 5.0
+  unit: s
+  origin: a_priori
+  why: "fallback for attack direction: team centroids in the first seconds of a half"
+
+# -- D-GOAL ---------------------------------------------------------------------------------------
+GOAL_TOL:
+  value: 0.5
+  unit: m
+  origin: a_priori
+  why: "tolerance on the goal posts for tracking noise"
+T_GAP_LOST:
+  value: 1.0
+  unit: s
+  origin: a_priori
+  why: "minimum length of the gap that follows a ball lost towards the goal"
+T_GOAL_KO:
+  value: 120.0
+  unit: s
+  origin: a_priori
+  why: "a goal is followed by the kick-off within two minutes (celebration, VAR check)"
+ST_GOAL_WIN:
+  value: 10.0
+  unit: s
+  origin: a_priori
+  why: "a Smart Tagging GOALS interval must overlap this window around the candidate"
+T_GOAL_CLUSTER:
+  value: 15.0
+  unit: s
+  origin: a_priori
+  why: "after a goal the ball is fetched from the net: candidates closer than this are one event, the first one is the goal"
+T_SHOT_EXTRAP:
+  value: 1.5
+  unit: s
+  origin: a_priori
+  why: "a ball lost in flight is extrapolated in a straight line for at most this long"
+SIGMA_EXTRAP_GROWTH:
+  value: 1.0
+  unit: m/s
+  origin: a_priori
+  why: "uncertainty of an extrapolated position grows with time (curve, deflection, bounce)"
+W_SRC_LOST_SHOT:
+  value: 0.8
+  unit: factor
+  origin: a_priori
+  why: "goal inferred from a shot lost in flight: weaker than the ball seen in the net"
+W_SRC_LOST_BOX:
+  value: 0.6
+  unit: factor
+  origin: a_priori
+  why: "goal inferred from a ball lost in the box: weaker still"
+W_SRC_NONE:
+  value: 0.4
+  unit: factor
+  origin: a_priori
+  why: "kick-off after a goal with no ball evidence: only the formation span is labelled"
+W_NO_ST:
+  value: 0.8
+  unit: factor
+  origin: a_priori
+  why: "strength multiplier when Smart Tagging has no GOALS tag around the goal"
+W_NO_ST_KO:
+  value: 0.8
+  unit: factor
+  origin: a_priori
+  why: "strength multiplier when Smart Tagging has no 'Kick Off (After Goal)' at the kick-off"

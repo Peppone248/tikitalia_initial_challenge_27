@@ -1,0 +1,28 @@
+# Approach B (boosted baseline), chosen on the IDSSE validation only (REPORT_B.md).
+# The public 5 minutes were looked at after the choice, as a structure check.
+
+dead_from: c_v3                # the D mask: approach C v3 (v1 HMM D + Smart Tagging anchor)
+c3_config_dir: config_c3       # used to regenerate it (scripts/make_submission_b.py)
+
+window: 25                     # +/- frames of the nearest-player majority vote (official: 50)
+unseen: spread                 # no ball vote in the window -> the more spread-out team
+spread_smooth: 75              # frames, smoothing of the spread difference
+min_poss_s: 2.0                # possessions shorter than this go to the team before them
+
+slow_dead:                     # D-SLOW (point 1), on top of the c_v3 D
+  enabled: true
+  v_max_ms: 1.1                # mean player speed below this = everybody walking
+  smooth_frames: 50
+  min_s: 3.0
+  close_s: 1.0
+  unseen_share: 0.5            # only where the ball is mostly unseen
+
+broadcast_dead:                # D-BC (broadcast cuts): no broadcast on IDSSE, so it cannot be
+  enabled: false               # validated there -> OFF by default (REPORT_B.md, section 4)
+  min_s: 3.0                   # cut spans shorter than this are ignored
+  bridge_s: 1.0                # live islands shorter than this inside a cut are bridged
+  v_max_ms: 1.5                # tactical mean player speed under this = nobody playing
+  kick_speed: 8.0              # a ball seen faster than this = play
+  close_s: 1.0
+  min_dead_s: 3.0
+broadcast_ball: false          # fill the tactical ball gaps with the aligned broadcast ball

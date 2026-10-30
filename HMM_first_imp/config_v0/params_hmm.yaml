@@ -1,0 +1,126 @@
+# FROZEN v0 settings: python HMM_first_imp/scripts/make_submission.py --config-dir HMM_first_imp/config_v0
+
+# Thresholds added by HMM_first_imp. Same schema as src/tikitalia/config/params.yaml (merged on
+# top of it): value, unit, origin (a_priori | distribution), why. Values with origin
+# 'distribution' are estimated from the data WITHOUT labels at run time.
+#
+# Never tune a value on the public ground truth or on specific moments of BAR-ATH (RULES.md).
+# Values here come from docs/REGOLE_PSEUDO_LABEL.md 3 where they were already proposed.
+
+# -- control / touch (events.control_episodes) --------------------------------------------------
+R_CONTROL:
+  value: 1.5
+  unit: m
+  origin: a_priori
+  why: "REGOLE 3: player within reach of the ball (centroid vs feet + a stride)"
+V_REL_CONTROL:
+  value: 2.0
+  unit: m/s
+  origin: a_priori
+  why: "REGOLE 3: ball and player move together"
+T_TOUCH:
+  value: 0.2
+  unit: s
+  origin: a_priori
+  why: "shortest contact counted as a touch (a one-touch pass); shorter = flicker of the nearest player"
+CONTROL_MERGE_GAP:
+  value: 0.2
+  unit: s
+  origin: a_priori
+  why: "flicker of the nearest player inside one contact"
+T_CONTROL:
+  value: 1.0
+  unit: s
+  origin: a_priori
+  why: "REGOLE 3 / CHALLENGE.md: a player keeps the ball for a few seconds (prudent version)"
+
+# -- P-FREE, P-PASS ------------------------------------------------------------------------------
+R_FREE_OPP:
+  value: 8.0
+  unit: m
+  origin: a_priori
+  why: "REGOLE 3: uncontested possession, nearest opponent far"
+V_PASS:
+  value: 5.0
+  unit: m/s
+  origin: a_priori
+  why: "REGOLE 3: above this the ball is travelling (pass), not carried"
+T_PASS_MAX:
+  value: 3.0
+  unit: s
+  origin: a_priori
+  why: "REGOLE 3: a 40-50 m pass at typical speed"
+D_PASS_MIN:
+  value: 5.0
+  unit: m
+  origin: a_priori
+  why: "REGOLE 3: tells a pass from the same player touching again"
+N_PASS_ANCHOR:
+  value: 2
+  unit: receptions
+  origin: a_priori
+  why: "CHALLENGE.md: a team completes more than two consecutive passes"
+
+# -- restarts ------------------------------------------------------------------------------------
+ACC_KICK_QUANTILE:
+  value: 0.90
+  unit: quantile
+  origin: a_priori
+  why: "a kick is among the strongest accelerations of the ball"
+ACC_KICK:
+  value: null
+  unit: m/s^2
+  origin: distribution
+  why: "acceleration of a kicked ball, from the data without labels"
+  estimator: "quantile ACC_KICK_QUANTILE of |ball acceleration| on visible graded frames"
+T_RESTART_LOOKBACK:
+  value: 0.5
+  unit: s
+  origin: a_priori
+  why: "REGOLE R-TOUCH: team of the nearest player in the half second before the kick"
+T_RESTART_SPAN:
+  value: 1.0
+  unit: s
+  origin: a_priori
+  why: "a RESTART vote covers the first second of the new possession"
+
+# -- D rules -------------------------------------------------------------------------------------
+SLOWDOWN_RATIO:
+  value: 0.5
+  unit: ratio
+  origin: a_priori
+  why: "REGOLE 3: collective speed halved = probable whistle"
+T_WHISTLE_MIN:
+  value: 1.0
+  unit: s
+  origin: a_priori
+  why: "REGOLE D-WHISTLE: slowdown sustained for at least a second"
+T_GAP_LONG:
+  value: 10.0
+  unit: s
+  origin: a_priori
+  why: "REGOLE 3: long gaps of the ball (stoppages, replays); only with the collective slowdown"
+T_HOLD_MAX:
+  value: 90.0
+  unit: s
+  origin: a_priori
+  why: "D-HOLD: a stoppage longer than this without a detected restart is left to the other rules"
+T_STILL_DEAD:
+  value: 2.0
+  unit: s
+  origin: a_priori
+  why: "ball at rest for seconds with play slowed: placed for a restart (hint: speed 0 for several frames -> D)"
+
+# -- X -------------------------------------------------------------------------------------------
+T_X_MIN:
+  value: 0.5
+  unit: s
+  origin: a_priori
+  why: "ball not seen for at least this long: the frame is unobservable (state X)"
+
+# -- NN features ---------------------------------------------------------------------------------
+V_BALL_FAST:
+  value: 10.0
+  unit: m/s
+  origin: a_priori
+  why: "maximum human running speed: a faster ball is travelling alone (pass, shot, clearance)"

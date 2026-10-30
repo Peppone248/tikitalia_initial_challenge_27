@@ -1,0 +1,49 @@
+# Tracking of the public-window evaluation across versions (scripts/track_public_eval.py).
+# The public 5 minutes are a SANITY CHECK, never a tuning target (RULES): choices are made on
+# IDSSE (scripts/run_validation.py). Add one entry per new version, in chronological order;
+# the document shows each version against the previous one.
+#
+# csv / summary: relative to HMM_first_imp/. summary = run_summary.json of the same run
+# (full-match diagnostics, no ground truth involved).
+
+gt: public
+bootstrap: 1000
+out_md: EVAL_TRACKING.md
+out_json: outputs/eval_tracking/results.json
+
+# official baselines shown for reference (from ../evaluation/results/)
+references: [baseline_smooth125, baseline_smooth50]
+
+versions:
+  - name: v0
+    date: 2026-10-29
+    csv: outputs/run_v0/tikitalia.csv
+    summary: outputs/run_v0/run_summary.json
+    what: "HMM di Bakis per frame, NN (MLP) + regole, config_v0"
+    idsse_spellf1: 0.289
+  - name: v1
+    date: 2026-10-30
+    csv: outputs/run/tikitalia.csv
+    summary: outputs/run/run_summary.json
+    what: "v0 + team gate, NN team-blind (random-feature), D-WHISTLE anchor, turnover rules"
+    idsse_spellf1: 0.256
+  - name: c_v2
+    date: 2026-10-30
+    csv: outputs/run_c/tikitalia.csv
+    summary: outputs/run_c/run_summary.json
+    what: "approccio C: D dall'HMM v1, confini solo agli eventi, squadra per segmento (lambda 0.5)"
+    idsse_spellf1: 0.316
+  - name: c_v3
+    date: 2026-10-30
+    csv: outputs/run_c3/tikitalia.csv
+    summary: outputs/run_c3/run_summary.json
+    what: "C + D da Smart Tagging (calci piazzati), D-SP spenta, finestra portiere, meno pesi (IDSSE con tagging simulato: v2 0.303 nelle stesse condizioni)"
+    idsse_spellf1: 0.319
+    idsse_delta_prev: 0.016      # vs c_v2 in the same run (simulated tagging), 6/7 matches
+  - name: b
+    date: 2026-10-30
+    csv: outputs/run_b/tikitalia.csv
+    summary: outputs/run_b/run_summary.json
+    what: "approccio B: giocatore piu' vicino (finestra +-25) + D di c_v3 + D-SLOW (tutti camminano, palla non vista) + squadra piu' larga quando la palla non si vede + possesso minimo 2 s"
+    idsse_spellf1: 0.354
+    idsse_delta_prev: 0.036      # vs c_v3 in the same run (simulated tagging), 7/7 matches

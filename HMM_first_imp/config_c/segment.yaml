@@ -1,0 +1,42 @@
+# Approach C (v2): segment first, then assign the team (hmm_v0/segment_c.py).
+# All values a priori, with their reason; to be compared / tuned ONLY on the IDSSE validation
+# (other games), never on the BAR-ATH public window.
+
+# -- 1. dead ball ---------------------------------------------------------------------------------
+dead:
+  # rules = D evidence of the D rules (D-OUT, D-GOAL, D-KO, D-SP, D-WHISTLE, D-HOLD, ...), no NN
+  # hmm   = the D of the v1 engine (NN + HMM), the best D measured so far (D F1 0.82 on IDSSE)
+  # v2 default: hmm (IDSSE round 1: C+hmm D 0.304 vs C+rules D 0.223 spellF1)
+  source: hmm
+  min_evidence: 1.0          # nats of D evidence (votes.py): a D vote with w >= ~0.5
+  close_gap_s: 1.0           # a < 1 s alive gap between two D spells is the same stoppage
+  min_dead_s: 2.0            # no restart takes less (same reason as the v1 Bakis minimum)
+  min_alive_s: 1.0           # an alive island < 1 s between two stoppages is noise
+
+# -- 2. candidate boundaries: the only frames where possession may change -------------------------
+boundary_rules: [T-INTERCEPT, T-REV, R-TOUCH, R-KO, P-FREE]   # + every contact start (always)
+reappear_after_s: 0.5        # first frame the ball is seen again after a gap >= T_X_MIN
+
+# -- 3. team evidence per frame (> 0 home), summed over a segment in seconds ----------------------
+weights:
+  contact: 1.0               # a control episode (any length), x its strength: the direct signal
+  rules:                     # signed votes of the rules, x their strength
+    P-DRIB: 0.0              # 0: already counted as a contact (no double counting)
+    P-FREE: 0.5
+    P-PASS: 0.5              # the pass chain covers the flights between team-mates
+    T-INTERCEPT: 1.0
+    T-REV: 0.5
+    R-TOUCH: 1.0
+    R-KO: 2.0
+    S-PHASE: 0.1             # slow signals: only to carry segments where the ball is unseen
+    P-SHAPE: 0.1
+  nearest: 0.3               # team of the nearest player when the ball is seen ...
+near_max_m: 5.0              # ... only if someone is within 5 m of the ball
+near_gap_m: 2.0              # ... weighted by how uncontested: full weight from a 2 m gap
+
+# -- assignment ------------------------------------------------------------------------------------
+# a change of team costs this many seconds of full-strength evidence. A priori 1 s (~T_CONTROL);
+# chosen 0.5 on the IDSSE validation (other games): 2 > 1 > 0.5 > 0.25 in spellF1, 0.25 better than
+# 0.5 by only +0.007 (5/7 matches) -> the more conservative value, because DFL possession is
+# finer than the challenge's and would push lambda too low (REPORT_C_v2 §4)
+change_penalty_s: 0.5

@@ -1,0 +1,10 @@
+# One run = one game -> one CSV. Relative paths are relative to HMM_first_imp/.
+game: BAR-ATH
+team_name: tikitalia                 # the CSV is named <team_name>.csv (SUBMISSION.md)
+data_dir: null                       # null = repo data/ or $MTAH_DATA_DIR (games.py)
+cache_path: ../outputs/cache/atd_arrays.npz   # parsed ATD, shared with the team scripts (gitignored)
+output_dir: outputs/run_c3              # approach C (v2)
+copy_to_evaluation_results: false    # also write ../evaluation/results/<team_name>_hmm_v0.csv
+write_episodes: true                 # per-rule episode CSVs (frame numbers: local debug only)
+# engine: hmm (v0 / v1: NN + Bakis HMM) | segment (approach C, v2: hmm_v0/segment_c.py)
+engine: segment

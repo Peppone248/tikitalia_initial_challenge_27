@@ -1,0 +1,16 @@
+# Pitch geometry, in metres. Constants of the pitch only: no thresholds of the rules here
+# (those live in params.yaml). Source: games.py (105.3 x 68.0, measured from the corrected
+# tracking) and the Laws of the Game for the markings.
+pitch:
+  length: 105.3
+  width: 68.0
+goal:
+  width: 7.32
+penalty_box:
+  depth: 16.5
+  width: 40.32
+goal_area:
+  depth: 5.5
+  width: 18.32
+centre_circle:
+  radius: 9.15

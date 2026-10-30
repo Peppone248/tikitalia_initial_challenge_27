@@ -1,0 +1,69 @@
+# Validation on other games (IMPROVEMENTS B3): IDSSE, 7 Bundesliga matches 2022/23 (DFL / Sportec,
+# CC-BY 4.0), labels from the DFL tracking itself: BallStatus 0 -> D, BallPossession 1/2 -> H/A.
+# No person labels anything; no frame of BAR-ATH and no BAR-ATH ground truth is used.
+#
+# The IDSSE tracking is clean (ball almost always seen, stable player tracks): it is degraded to
+# look like the BAR-ATH automatic tracking, with statistics of the BAR-ATH TRACKING (never of its
+# ground truth): ball gaps and visible stretches resampled from the BAR-ATH empirical lengths,
+# player tracks broken like the BAR-ATH slots.
+
+data_dir: ../data/idsse                  # <match>.npz from validation/fetch_idsse.py
+matches: [J03WMX, J03WN1, J03WOH, J03WOY, J03WPY, J03WQQ, J03WR9]
+out_dir: outputs/validation
+bootstrap: 1000                          # draws for the pooled confidence interval
+
+# the versions to compare: name -> config dir (relative to HMM_first_imp/) + --set overrides
+# baseline_window: the official starter/baseline.py (nearest player + majority vote +-window)
+versions:
+  baseline50: {baseline_window: 50}      # the published floor on BAR-ATH: spellF1 0.2433
+  v0: {config_dir: config_v0, set: {}}
+  v1: {config_dir: config, set: {}}
+  c_v2: {config_dir: config_c, set: {}}   # approach C: D from the v1 HMM, lambda 0.5
+  c_v3: {config_dir: config_c3, set: {}}  # v3: + Smart Tagging dead ball, goalkeeper, fewer weights
+
+variants: [degraded, clean]             # clean = the IDSSE tracking as it is (ceiling of the logic)
+
+# second label set: DFL possession flips shorter than this, between two spells of the other team,
+# are touches, not changes (CHALLENGE.md). = T_CONTROL, a priori; never chosen on a ground truth.
+controlled_min_s: 1.0
+
+degrade:
+  seed: 2027
+  # BAR-ATH tracking used for the statistics (the team's parsed ATD cache)
+  barath_cache: ../outputs/cache/atd_arrays.npz
+  ball:
+    # alternate visible / missing stretches, lengths resampled from the BAR-ATH stretches on
+    # graded frames (BAR-ATH: 40.7% missing, medians 13.8 s visible / 10.7 s missing)
+    resample_barath_runs: true
+    fallback_visible_s: [2.2, 5.5, 13.8, 30.3, 61.7]       # quantiles if the cache is missing
+    fallback_missing_s: [0.5, 6.1, 10.7, 21.1, 33.8]
+    # the ATD has no Z and the automatic tracker loses high balls: a ball higher than this is
+    # always missing (aerial duels, long balls)
+    aerial_z_m: 2.5
+    # ball reported only inside this distance from the pitch (the tactical camera framing)
+    max_outside_m: 3.0
+  players:
+    # player tracks broken into fragments: visible stretches resampled from the BAR-ATH slot
+    # fragments (median 35 s), gaps sized so that the missing share matches BAR-ATH (~7%)
+    resample_barath_fragments: true
+    missing_share: 0.07
+    fallback_fragment_s: 35.0
+
+# v3: a Smart Tagging-like feed for IDSSE, so the dead-ball anchor on Smart Tagging can be measured
+# on other games. Built from the true restarts (BallStatus 0 -> 1) of the CLEAN match, then degraded
+# like BAR-ATH's tagging. Nothing here comes from BAR-ATH's ground truth.
+smart_tagging_sim:
+  seed: 27
+  # share of real restarts that BAR-ATH's tagging tags = BAR-ATH tag count / mean IDSSE count per
+  # match: throw-ins 26/42.7, corners 12/7.4 (capped at 1), goal kicks 10/15.3, free kicks 5/31.6
+  # (fouls and offsides: no tag of their own, almost never tagged as a free kick)
+  recall: {throw-in: 0.61, corner kick: 1.0, goal kick: 0.65, free kick: 0.16}
+  # tag start = restart - lead, lead resampled from BAR-ATH: seconds from the tag start to the
+  # first fast ball seen (corners, throw-ins; BAR-ATH tracking only)
+  lead_s: [6.1, 5.4, 4.9, 10.2, 10.5, 9.2, 7.7, 7.0, 7.1, 6.6, 6.3, 2.8,
+           3.2, 6.9, 4.1, 7.6, 5.2, 7.2, 4.5, 0.4, 4.1, 7.2, 6.3, 9.8, 6.8, 6.2, 2.3, 4.4]
+  length_s: 35
+  # kick-offs: all tagged on BAR-ATH (6/6), 5 s window with the kick 3.8-4.9 s after its start;
+  # after a goal a GOALS tag precedes it (BAR-ATH: it starts 71-251 s before, ends at the kick-off)
+  kickoff_lead_s: [3.8, 4.9]
+  goal_tag_before_s: 120
