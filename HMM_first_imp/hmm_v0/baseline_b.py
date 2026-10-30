@@ -85,11 +85,23 @@ def _min_possession(lab, alive, k):
     return out
 
 
+def moving_average(x, size):
+    """Centred moving average over `size` samples, edges replicated (same as
+    scipy.ndimage.uniform_filter1d(mode="nearest"); numpy only, so the repository needs no scipy)."""
+    x = np.asarray(x, float)
+    size = int(size)
+    if size <= 1:
+        return x.copy()
+    left = size // 2
+    pad = np.pad(x, (left, size - 1 - left), mode="edge")
+    c = np.concatenate(([0.0], np.cumsum(pad)))
+    return (c[size:] - c[:-size]) / size
+
+
 def spread_team(px, py, team_of_slot, smooth_frames=75):
     """'H'/'A' per frame: the team whose players are more spread out (std of x + std of y).
     The team in possession opens up, the defending team closes down: on IDSSE (degraded, 7
     matches) this alone names the team of 74% of the alive frames, 71% with the ball unseen."""
-    from scipy.ndimage import uniform_filter1d
     t = np.asarray(team_of_slot)
     import warnings
     with warnings.catch_warnings():
@@ -97,20 +109,19 @@ def spread_team(px, py, team_of_slot, smooth_frames=75):
         sp = [np.nanstd(px[:, t == k], 1) + np.nanstd(py[:, t == k], 1) for k in (HOME, AWAY)]
     diff = np.nan_to_num(sp[0] - sp[1])
     if smooth_frames > 1:
-        diff = uniform_filter1d(diff, int(smooth_frames), mode="nearest")
+        diff = moving_average(diff, smooth_frames)
     return np.where(diff >= 0, "H", "A"), diff
 
 
 def mean_player_speed(px, py, fps=25, smooth_frames=50):
     """Mean speed (m/s) of the tracked players, smoothed over smooth_frames; 5 m/s where nobody is
     tracked (so a missing frame never looks like a stoppage)."""
-    from scipy.ndimage import uniform_filter1d
     import warnings
     v = np.hypot(np.gradient(px, axis=0), np.gradient(py, axis=0)) * fps
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
         m = np.nanmean(v, axis=1)
-    return uniform_filter1d(np.nan_to_num(m, nan=5.0), int(smooth_frames), mode="nearest")
+    return moving_average(np.nan_to_num(m, nan=5.0), smooth_frames)
 
 
 def slow_dead(ball_x, px, py, half, cfg, fps=25):
