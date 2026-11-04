@@ -234,8 +234,7 @@ possessore chiaro" (CHALLENGE.md): le riprese sono le ancore più affidabili che
 ### 3.5 Vincoli sulle regole (per restare in regola)
 
 - **Niente frame specifici.** Le condizioni sono generali ("palla ferma vicino alla bandierina"),
-  mai "dal frame 45.210 al 45.400". Guardare il video per capire e progettare è consentito;
-  trasformare ciò che si è visto in costanti legate a momenti precisi no (RULES.md, regola 1).
+  mai costanti legate a momenti precisi (RULES.md, regola 1).
 - **Soglie: a priori o dai dati, mai dalla GT.** Due modi leciti: un valore con significato
   calcistico dichiarato ("controllo = 1 s entro 1,5 m"), oppure un valore ricavato senza etichette
   dalla distribuzione dei dati (quantili, mixture model). I 5 minuti pubblici non si usano per

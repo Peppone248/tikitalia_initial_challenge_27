@@ -46,8 +46,7 @@ Ogni regola che entra nel motore deve rispettare tutti i punti. Va spuntata in c
       numero di frame, nessun timestamp, nessun riferimento a un'azione specifica di BAR-ATH.
 - [ ] Ogni soglia è un **parametro con nome** (§3) con origine dichiarata: `a priori` (significato
       calcistico/fisico) oppure `distribuzione` (quantile o mixture ricavati senza etichette).
-- [ ] Nessuna soglia è stata scelta o ritoccata guardando la **GT pubblica** né guardando il
-      risultato su azioni specifiche del video di BAR-ATH. Il video si usa per capire e fare debug.
+- [ ] Nessuna soglia è stata scelta o ritoccata guardando la **GT pubblica**.
 - [ ] Nessun **dato umano sulla partita** (eventi, risultato, formazioni, tracking corretto).
 - [ ] Deterministica: stessi dati + stesso codice → stesso output (niente random senza seed fisso).
 - [ ] Ha una **scheda** in questo file (condizione, output, confidenza, edge case, metrica).
@@ -337,8 +336,8 @@ emit:  D
 span:  finché vale la condizione → fine al restart_kick
 plus:  restart_team = squadra con il giocatore più vicino alla palla al restart_kick  (R-KO)
 conf:  0.95  (0.99 se c'è uno ST `Kick Off (Start)` o `Kick Off (After Goal)` sovrapposto)
-note:  frame non valutati = X. MA (FAQ.md): il 2° tempo è valutato da 110.808 e il kick-off
-       arriva a 113.742 → quei 2.934 frame sono valutati e tutti D. Regola generale, senza
+note:  frame non valutati = X. MA (FAQ.md): il 2° tempo è valutato da prima del kick-off
+       → quel tratto è valutato ed è tutto D. Regola generale, senza
        costanti: dall'inizio di ogni blocco valutato (half_video_blocks) fino al restart_kick
        del primo D-KO del tempo → D.
 tempi: il calcio d'inizio NON coincide in generale con il primo frame del tempo.
@@ -824,7 +823,7 @@ per ogni restart_kick f_r:
     restart_team = argmax_team Σ q·s
     agreement    = quota di peso sul vincitore
     if agreement < 0.7: marcare la ripresa come "incerta" nel report
-    # le riprese incerte sono il primo posto da guardare nel debug (video), mai da correggere a mano
+    # le riprese incerte sono il primo posto da guardare nel debug, mai da correggere a mano
 ```
 
 Coppie di regole che si controllano a vicenda: R-THROW ↔ R-LAST (rimesse), R-CORNER ↔ R-WALL ↔

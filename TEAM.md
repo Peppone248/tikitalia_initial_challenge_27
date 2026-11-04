@@ -57,7 +57,9 @@ python evaluation/run_evaluation.py    # scores the 4 baselines on the public 5 
 
 ```
 games.py, evaluation/, starter/, *.md   official challenge material (upstream — don't edit, see §5)
+docs/                                   start at docs/README.md: every report in order
 src/tikitalia/                          our code: features, models, post-processing
+HMM_first_imp/, combined_algorithm/     reports of each approach (the code follows once cleaned up)
 notebooks/                              exploration; name them NN_initials_topic.ipynb
 scripts/                                command-line entry points (check_data.py, ...)
 evaluation/results/                     put submission CSVs here to score them (ignored by git)
@@ -80,6 +82,8 @@ import tikitalia
 - Ranked on **spellF1** (whole possessions recovered); macroF1 is the tie-break. See EVALUATION.md.
 - Do not commit: anything in `data/`, videos, full-match ground truth, large intermediate files
   (put caches in `cache/` or `outputs/`, both ignored).
+- Stage files by name or folder, and read `git status` before committing. The submission repository
+  has to be public (SUBMISSION.md), and what enters the history stays there.
 - No manual labelling or correcting of the data — see RULES.md.
 
 ## 5. Pulling updates from the organisers

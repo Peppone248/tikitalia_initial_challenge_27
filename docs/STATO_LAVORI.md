@@ -244,7 +244,7 @@ In ordine. Si spunta qui e si aggiorna la riga corrispondente sopra.
 - Palla assente nel 41% dei frame valutati, proprio nelle situazioni contese: limite principale
   della v0 (IMPROVEMENTS B1, B2).
 - D-GOAL: un goal "no_candidate" (solo il calcio d'inizio) e due tag GOALS dello ST senza goal
-  rilevato, da guardare nel video.
+  rilevato, da controllare.
 
 ---
 

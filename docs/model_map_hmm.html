@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HMM H/A/D Map</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column (68ch) with the two figures at full width; H/A/D keep fixed colours across the page. */
+:root {
+  --bg: #f3f6f2;
+  --surface: #ffffff;
+  --fg: #16201a;
+  --muted: #4b5a51;
+  --line: #d5ddd6;
+  --line-strong: #8d9c92;
+  --accent: #0e6b5b;
+  --accent-soft: #dcefe8;
+  --on-accent: #ffffff;
+  --h: #2255c4;
+  --h-soft: #dce6fb;
+  --a: #b8500f;
+  --a-soft: #fae5d6;
+  --d: #566069;
+  --d-soft: #e4e8eb;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --display: "Bricolage Grotesque", "IBM Plex Sans", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1411; --surface: #161e19; --fg: #e5ece7; --muted: #a2b2a8; --line: #2b3830; --line-strong: #5d7165;
+    --accent: #4cc2a6; --accent-soft: #14302a; --on-accent: #08150f;
+    --h: #82a8ff; --h-soft: #19284a; --a: #ff9d66; --a-soft: #3b2415; --d: #aab3bb; --d-soft: #252b30;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1411; --surface: #161e19; --fg: #e5ece7; --muted: #a2b2a8; --line: #2b3830; --line-strong: #5d7165;
+  --accent: #4cc2a6; --accent-soft: #14302a; --on-accent: #08150f;
+  --h: #82a8ff; --h-soft: #19284a; --a: #ff9d66; --a-soft: #3b2415; --d: #aab3bb; --d-soft: #252b30;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 400 15.5px/1.62 var(--sans);
+  padding-block: 40px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 44px; }
+.prose { max-width: 68ch; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; letter-spacing: -0.015em; margin: 0; }
+h1 { font-size: clamp(1.9rem, 4.6vw, 2.9rem); line-height: 1.08; font-weight: 700; }
+h2 { font-size: clamp(1.35rem, 2.6vw, 1.7rem); line-height: 1.2; font-weight: 700; }
+h3 { font-size: 1.12rem; line-height: 1.3; font-weight: 600; }
+p { margin: 0; }
+p + p { margin-top: 0.8em; }
+code, .mono { font-family: var(--mono); font-size: 0.88em; }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+header { display: flex; flex-direction: column; gap: 16px; }
+.lede { font-size: 1.1rem; max-width: 62ch; color: var(--fg); }
+.legend { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 4px; }
+.legend span { display: inline-flex; align-items: center; gap: 8px; font-size: 0.92rem; color: var(--muted); }
+.chip { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; font: 600 13px var(--mono); border: 1.5px solid; }
+.chip.h { background: var(--h-soft); color: var(--h); border-color: var(--h); }
+.chip.a { background: var(--a-soft); color: var(--a); border-color: var(--a); }
+.chip.d { background: var(--d-soft); color: var(--d); border-color: var(--d); }
+.note { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 6px; padding: 16px 18px; max-width: 76ch; }
+.note h3 { margin-bottom: 8px; }
+section { display: flex; flex-direction: column; gap: 18px; }
+figure { margin: 0; }
+.fig { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+.scroll { overflow-x: auto; }
+.scroll svg { display: block; width: 100%; height: auto; }
+figcaption { margin-top: 10px; font-size: 0.9rem; color: var(--muted); max-width: 86ch; }
+/* svg */
+svg { color: var(--fg); }
+.st { font: 600 13px var(--sans); fill: var(--fg); }
+.ss { font: 400 10.5px var(--sans); fill: var(--muted); }
+.al { font: 400 10.5px var(--sans); fill: var(--fg); }
+.ti { font: 600 12.5px var(--sans); fill: var(--fg); }
+.st-on { font: 600 13px var(--sans); fill: var(--on-accent); }
+.ss-on { font: 400 10.5px var(--sans); fill: var(--on-accent); opacity: .92; }
+.b-in { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.2; }
+.b-proc { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.2; }
+.b-hmm { fill: var(--accent); stroke: var(--accent); }
+.b-out { fill: var(--surface); stroke: var(--fg); stroke-width: 1.5; }
+.encl { fill: none; stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 6 5; }
+.ln { fill: none; stroke: var(--fg); stroke-width: 1.4; }
+.sub { fill: var(--surface); stroke: var(--h); stroke-width: 1.5; }
+.sub-end { fill: var(--h-soft); stroke: var(--h); stroke-width: 2; }
+.s-h { fill: var(--h-soft); stroke: var(--h); stroke-width: 2; }
+.s-a { fill: var(--a-soft); stroke: var(--a); stroke-width: 2; }
+.s-d { fill: var(--d-soft); stroke: var(--d); stroke-width: 2; }
+.l-h { font: 700 22px var(--display); fill: var(--h); }
+.l-a { font: 700 22px var(--display); fill: var(--a); }
+.l-d { font: 700 22px var(--display); fill: var(--d); }
+.cl-h { fill: var(--h-soft); stroke: var(--h); stroke-width: 1.5; }
+.cl-a { fill: var(--a-soft); stroke: var(--a); stroke-width: 1.5; }
+.cl-d { fill: var(--d-soft); stroke: var(--d); stroke-width: 1.5; }
+.mut { font: 400 11px var(--sans); fill: var(--muted); }
+/* steps */
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 28px; }
+.step { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 16px; }
+.num { width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid var(--accent); color: var(--accent); display: grid; place-items: center; font: 500 14px var(--mono); background: var(--surface); }
+.step-body { display: flex; flex-direction: column; gap: 10px; max-width: 70ch; min-width: 0; }
+.step-body ul { margin: 0; padding-left: 1.15em; display: flex; flex-direction: column; gap: 6px; }
+.step-body li::marker { color: var(--accent); }
+.tag { display: inline-block; font: 500 12px var(--mono); color: var(--muted); }
+/* table */
+.tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; min-width: 620px; font-variant-numeric: tabular-nums; }
+th, td { padding: 10px 14px; text-align: right; border-bottom: 1px solid var(--line); font-size: 0.93rem; }
+th:first-child, td:first-child { text-align: left; }
+thead th { font: 600 12px var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+tbody tr:last-child td { border-bottom: 0; }
+td.best { font-weight: 600; color: var(--accent); }
+tr.pub td { background: var(--d-soft); }
+tr.pub td.best { color: var(--fg); }
+/* glossary */
+dl.gloss { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 0 36px; margin: 0; }
+.gloss > div { padding: 12px 0; border-top: 1px solid var(--line); min-width: 0; }
+.gloss dt { font: 500 13px var(--mono); color: var(--accent); margin-bottom: 3px; }
+.gloss dd { margin: 0; font-size: 0.93rem; color: var(--fg); }
+footer { font-size: 0.86rem; color: var(--muted); max-width: 80ch; border-top: 1px solid var(--line); padding-top: 16px; }
+@media (max-width: 520px) { .step { grid-template-columns: 1fr; gap: 8px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">MTAH27 · model map · snapshot of 04/11/2026</div>
+  <h1>How the HMM decides who has the ball</h1>
+  <p class="lede">The model with the highest spellF1 on the validation matches decides two things in a single pass: who has possession and when play is stopped. This page shows what it reads, how it recognises each state and why it does not change its mind at every frame.</p>
+  <div class="legend" aria-label="The three labels">
+    <span><i class="chip h">H</i> possession of the home team</span>
+    <span><i class="chip a">A</i> possession of the away team</span>
+    <span><i class="chip d">D</i> dead ball: play stopped or ball out</span>
+  </div>
+  <div class="note">
+    <h3>Read this first: what this page is not</h3>
+    <p>This is the model of the morning of 04/11. The current pipeline is <code>combined_algorithm</code> (<code>combined_algorithm/REPORT_COMBINED.md</code>): it keeps the single H/A/D HMM, but step 1 becomes our own tracking and steps 3a and 3b become gradient-boosted trees with new inputs. It is scored on a different benchmark, so its numbers cannot be compared with the ones below. That report also finds that the <code>degraded</code> scenario used here is clearly not like the provided match.</p>
+  </div>
+  <div class="note">
+    <h3>Which model is mapped</h3>
+    <p>The <strong>single H/A/D HMM</strong> (REPORT_B, section 17). On IDSSE it has the highest spellF1: <strong>0.5895</strong> with degraded tracking and <strong>0.7137</strong> with clean tracking. Inside it uses the "team model" of section 15, which remains the best variant on the 5-minute public window (spellF1 0.6815 and macroF1 0.8889). That window has 17 possessions and noise of about ±0.39, so it cannot be used to choose.</p>
+    <p>The report does not give the macroF1 of the HMM on IDSSE. The only value available is the one of the public window: 0.8521.</p>
+  </div>
+</header>
+
+<section>
+  <h2>The map</h2>
+  <figure>
+    <div class="fig"><div class="scroll">
+<svg viewBox="0 0 1090 436" role="img" aria-label="The flow of the H/A/D HMM: tracking and Smart Tagging enter cleaning and rules, two learned classifiers produce probabilities, the HMM combines them with minimum durations and transitions and produces the H, A, D sequence" style="min-width:860px">
+  <defs>
+    <marker id="ar1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker>
+  </defs>
+
+  <!-- column A: inputs -->
+  <text class="mut" x="10" y="18">INPUT</text>
+  <rect class="b-in" x="10" y="30" width="200" height="84" rx="8"/>
+  <text class="st" x="24" y="52">ATD tracking + metadata</text>
+  <text class="ss" x="24" y="69">22 players + ball, 25 fps</text>
+  <text class="ss" x="24" y="83">player roles (goalkeepers)</text>
+  <text class="ss" x="24" y="97">ball missing on 40.7% of frames</text>
+
+  <rect class="b-in" x="10" y="183" width="200" height="64" rx="8"/>
+  <text class="st" x="24" y="205">Smart Tagging</text>
+  <text class="ss" x="24" y="222">throw-ins, corners, kick-offs</text>
+  <text class="ss" x="24" y="236">automatic: not the truth</text>
+
+  <!-- column B -->
+  <text class="mut" x="280" y="18">CLEANING AND RULES</text>
+  <rect class="b-proc" x="280" y="30" width="200" height="84" rx="8"/>
+  <text class="st" x="294" y="52">1 · Tracking cleaning</text>
+  <text class="ss" x="294" y="69">keepers on the wrong team</text>
+  <text class="ss" x="294" y="83">tracks passed to the opponent</text>
+  <text class="ss" x="294" y="97">jumps &gt; 2.5 m in one frame</text>
+
+  <rect class="b-proc" x="280" y="150" width="200" height="130" rx="8"/>
+  <text class="st" x="294" y="172">2 · Dead-ball rules</text>
+  <text class="ss" x="294" y="190">D-SLOW: everyone walking</text>
+  <text class="ss" x="294" y="204">ball at rest · wall</text>
+  <text class="ss" x="294" y="218">ball out of the pitch</text>
+  <text class="ss" x="294" y="232">restarts from set pieces</text>
+  <text class="ss" x="294" y="246">islands of play &lt; 10 s</text>
+  <text class="ss" x="294" y="260">c_v3 HMM anchored on the tags</text>
+
+  <!-- column C: learned classifiers -->
+  <text class="mut" x="572" y="8">LEARNED FROM DATA</text>
+  <rect class="encl" x="572" y="14" width="236" height="288" rx="12"/>
+  <rect class="b-proc" x="590" y="30" width="200" height="84" rx="8"/>
+  <text class="st" x="604" y="52">3a · Team model</text>
+  <text class="ss" x="604" y="69">logistic regression, 49 features</text>
+  <text class="ss" x="604" y="83">gives P(H) on live-ball frames</text>
+  <text class="ss" x="604" y="97">swap H↔A: P becomes 1 − P</text>
+
+  <rect class="b-proc" x="590" y="150" width="200" height="130" rx="8"/>
+  <text class="st" x="604" y="172">3b · Dead-ball model</text>
+  <text class="ss" x="604" y="190">logistic regression, 40 inputs</text>
+  <text class="ss" x="604" y="204">gives P(D) on every frame</text>
+  <text class="ss" x="604" y="218">reads the rule layers,</text>
+  <text class="ss" x="604" y="232">the ball (seen, at rest, out),</text>
+  <text class="ss" x="604" y="246">player speed, the tags</text>
+  <text class="ss" x="604" y="262">labels: BallStatus (DFL)</text>
+
+  <text class="ss" x="572" y="324">Human labels enter here, but only from</text>
+  <text class="ss" x="572" y="338">other matches (7 IDSSE matches).</text>
+  <text class="ss" x="572" y="352">No label of BAR-ATH.</text>
+
+  <!-- column D -->
+  <text class="mut" x="890" y="18">DECISION</text>
+  <rect class="b-proc" x="890" y="30" width="190" height="84" rx="8"/>
+  <text class="st" x="904" y="52">4 · Evidence per frame</text>
+  <text class="ss" x="904" y="69">w · (log P(class) − log prior)</text>
+  <text class="ss" x="904" y="83">for H, A and D, with w = 1.0</text>
+
+  <rect class="b-hmm" x="890" y="150" width="190" height="130" rx="8"/>
+  <text class="st-on" x="904" y="172">5 · H / A / D HMM</text>
+  <text class="ss-on" x="904" y="190">3 states, each one a Bakis</text>
+  <text class="ss-on" x="904" y="204">chain (minimum duration)</text>
+  <text class="ss-on" x="904" y="218">transitions counted on IDSSE</text>
+  <text class="ss-on" x="904" y="232">Viterbi decoding:</text>
+  <text class="ss-on" x="904" y="246">the most probable sequence</text>
+
+  <rect class="b-out" x="890" y="330" width="190" height="88" rx="8"/>
+  <text class="st" x="904" y="352">Output: the CSV</text>
+  <text class="ss" x="904" y="369">frame,label · 199,319 rows</text>
+  <rect class="cl-h" x="904" y="380" width="24" height="24" rx="5"/><text class="al" x="916" y="396" text-anchor="middle" style="font-weight:600">H</text>
+  <rect class="cl-a" x="934" y="380" width="24" height="24" rx="5"/><text class="al" x="946" y="396" text-anchor="middle" style="font-weight:600">A</text>
+  <rect class="cl-d" x="964" y="380" width="24" height="24" rx="5"/><text class="al" x="976" y="396" text-anchor="middle" style="font-weight:600">D</text>
+
+  <!-- arrows -->
+  <line class="ln" x1="210" y1="72" x2="278" y2="72" marker-end="url(#ar1)"/>
+  <text class="al" x="244" y="63" text-anchor="middle">raw data</text>
+  <line class="ln" x1="210" y1="215" x2="278" y2="215" marker-end="url(#ar1)"/>
+  <text class="al" x="244" y="206" text-anchor="middle">tags</text>
+  <line class="ln" x1="380" y1="114" x2="380" y2="148" marker-end="url(#ar1)"/>
+  <text class="al" x="390" y="135">clean tracking</text>
+
+  <line class="ln" x1="480" y1="72" x2="588" y2="72" marker-end="url(#ar1)"/>
+  <text class="al" x="534" y="54" text-anchor="middle">votes, shape,</text>
+  <text class="al" x="534" y="65" text-anchor="middle">contacts</text>
+  <line class="ln" x1="480" y1="215" x2="588" y2="215" marker-end="url(#ar1)"/>
+  <text class="al" x="534" y="197" text-anchor="middle">layers and</text>
+  <text class="al" x="534" y="208" text-anchor="middle">D mask</text>
+
+  <line class="ln" x1="790" y1="72" x2="888" y2="72" marker-end="url(#ar1)"/>
+  <text class="al" x="842" y="63" text-anchor="middle">P(H | live)</text>
+  <polyline class="ln" points="790,215 850,215 850,100 888,100" marker-end="url(#ar1)"/>
+  <text class="al" x="814" y="231">P(D)</text>
+
+  <line class="ln" x1="985" y1="114" x2="985" y2="148" marker-end="url(#ar1)"/>
+  <text class="al" x="977" y="135" text-anchor="end">per frame</text>
+  <line class="ln" x1="985" y1="280" x2="985" y2="328" marker-end="url(#ar1)"/>
+  <text class="al" x="977" y="308" text-anchor="end">decoding</text>
+</svg>
+    </div></div>
+    <figcaption>Solid arrows are data flows. The dashed box encloses the two classifiers that learn from the labels of other matches. 3a and 3b also read the clean tracking and the rule signals, but only the main links are drawn, for legibility. The rules no longer decide D: their layers become inputs of 3b.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>Step by step</h2>
+  <ol class="steps">
+
+    <li class="step"><div class="num">0</div><div class="step-body">
+      <h3>What it receives</h3>
+      <p>The model sees no video and no audio. It works on three sources:</p>
+      <ul>
+        <li><strong>ATD tracking</strong>: the position of 22 players and the ball, 25 frames per second. The ball is missing on 40.7% of the graded frames of BAR-ATH, often exactly in confused play (crowded areas, aerial duels).</li>
+        <li><strong>Smart Tagging</strong>: automatic labels of throw-ins, corners, goal kicks, free kicks and kick-offs. They are not the truth and contain errors. They cover almost all corners and kick-offs, about 6 throw-ins out of 10 and few free kicks (no tag for fouls and offsides).</li>
+        <li><strong>ATD metadata</strong>: the role of each player, used to recognise the goalkeepers.</li>
+      </ul>
+      <p>Only in training do the DFL labels of the IDSSE matches enter: <code>BallPossession</code> says who has the ball, <code>BallStatus</code> says whether the ball is live or dead.</p>
+    </div></li>
+
+    <li class="step"><div class="num">1</div><div class="step-body">
+      <h3>Tracking cleaning</h3>
+      <p>First, tracker errors with a physical or Laws-of-the-Game cause are corrected:</p>
+      <ul>
+        <li>A jump of over 2.5 m between two frames equals 62 m/s: it is not a person, it is another track.</li>
+        <li>A goalkeeper who appears in the opposite box on a track that did not arrive there is actually the other goalkeeper, and the track moves to the other team.</li>
+        <li><strong>R5</strong>: a fragment that restarts where an opposing track ended, while its team already has two extra players on the pitch, belongs to the opponent.</li>
+      </ul>
+    </div></li>
+
+    <li class="step"><div class="num">2</div><div class="step-body">
+      <h3>Dead-ball rules</h3>
+      <p>Each rule produces a layer of frames that are candidates for D:</p>
+      <ul>
+        <li><strong>D-SLOW</strong>: the mean speed of the players stays under 1.1 m/s for at least 3 s and the ball is invisible for half of the stretch. It is for fouls and offsides, the hardest to see.</li>
+        <li><strong>Ball at rest</strong> on the pitch for at least 2 s, until the kick; <strong>wall</strong>: at least 3 players of the same team close together and still.</li>
+        <li><strong>Ball leaving the pitch</strong> (Law 9): D starts when the ball has crossed the line, not before.</li>
+        <li><strong>R1</strong> closes the stoppage at the first set-piece kick; <strong>R4</strong> moves D-SLOW back to the point where the ball disappeared; <strong>R6</strong> joins islands of play under 10 s between two stoppages; <strong>R3c</strong> recognises a ball lost while going out and found again on the same line.</li>
+        <li><strong>c_v3</strong>: an earlier HMM for the dead ball, anchored on the Smart Tagging tags.</li>
+      </ul>
+    </div></li>
+
+    <li class="step"><div class="num">3</div><div class="step-body">
+      <h3>Two learned classifiers</h3>
+      <p>A <strong>logistic regression</strong> adds up the features with weights and passes the result through a sigmoid, which gives a probability between 0 and 1. The weights are estimated with Newton steps and an L2 penalty that keeps them small. Training is deterministic: same data, same weights.</p>
+      <h3 style="font-size:1rem">3a · Who has the ball (49 features)</h3>
+      <ul>
+        <li><strong>Control votes</strong>: a player votes if within 1.5 m of the ball and the ball moves under 8 m/s. Votes are summed on windows of 0.5, 1, 2 and 4 s, before and after the frame. The last and the next vote weigh less as they get further away in time, so a vote still counts when the ball disappears.</li>
+        <li><strong>Closeness to the ball</strong> on three scales (1, 3 and 8 m) and ball position along the attacking direction.</li>
+        <li><strong>Collective shape</strong> (home minus away): spread, length, width, forward speed, centroid, defensive line, most advanced player, mean speed. The team with the ball spreads out and moves up, the defending team gets compact. It works even without the ball.</li>
+        <li><strong>Transitions</strong>: the mean of those measures in the second (or two) after the frame minus the mean before. At a change of possession the two teams swap roles, and it shows in the players.</li>
+        <li><strong>Contacts and duels</strong> (Vidal-Codina et al., 2022): contact = ball close to a player who changes direction by over 30° or speed by over 2 m/s; duel = two opponents within 1 m of the ball.</li>
+        <li><strong>Rule signals</strong>: goalkeeper catch and team taking the restart.</li>
+      </ul>
+      <p>All features change sign if H and A are swapped, and the model has no intercept. So with the teams swapped P(H) = 1 − P(H): it cannot learn "home has the ball more", it learns only the evidence. The largest weights are centroid (+4.6) and defensive line (−4.7), then the transitions, then the last and next vote.</p>
+      <h3 style="font-size:1rem">3b · Ball live or dead (40 inputs)</h3>
+      <p>It reads the final mask of the rules (also on windows of ±1, 3 and 8 s), the D of c_v3 and each rule layer. It adds the ball (seen or not, speed, how long since seen, last time seen outside the lines, distance from the line), the mean speed of the players on windows of 2 and 5 s, and the tag windows with the time since the kick. On per-frame live/dead accuracy it reaches 0.942 against 0.914 of the rules alone (degraded tracking) and 0.981 against 0.971 (clean).</p>
+    </div></li>
+
+    <li class="step"><div class="num">4</div><div class="step-body">
+      <h3>Evidence per frame</h3>
+      <p>The two probabilities give P(H), P(A) and P(D) for every frame. For each state the HMM uses <code>w · (log P(class | frame) − log prior)</code>. The <strong>prior</strong> (the frequency of the class) is subtracted, so that a frequent class does not win only for that reason. <code>w</code> is the weight of the evidence: it is 1.0, and between 0.75 and 1.0 the result does not change by more than 0.002.</p>
+    </div></li>
+
+    <li class="step"><div class="num">5</div><div class="step-body">
+      <h3>The HMM decides the sequence</h3>
+      <p>A <strong>Hidden Markov Model</strong> assumes that the states H, A, D are hidden and that each one "produces" the data we observe. It looks for the most probable sequence of states over all the time, taking three things into account: the evidence of each frame, how long a state lasts at least, how likely it is to go from one state to another. The figure below describes it better.</p>
+    </div></li>
+
+  </ol>
+</section>
+
+<section>
+  <h2>How it recognises and keeps the states</h2>
+  <figure>
+    <div class="fig"><div class="scroll">
+<svg viewBox="0 0 1000 348" role="img" aria-label="Left: the Bakis chain inside a state: each sub-state stays or advances, and it exits only from the last one. Right: the three states H, A, D with arrows for the possible changes" style="min-width:780px">
+  <defs>
+    <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker>
+  </defs>
+
+  <text class="ti" x="20" y="28">Inside a state: Bakis chain (example: H, 20 sub-states)</text>
+  <text class="ti" x="560" y="28">Between states: which changes are possible</text>
+
+  <!-- chain -->
+  <rect class="sub" x="20" y="100" width="40" height="40" rx="6"/><text class="al" x="40" y="124" text-anchor="middle">1</text>
+  <rect class="sub" x="80" y="100" width="40" height="40" rx="6"/><text class="al" x="100" y="124" text-anchor="middle">2</text>
+  <rect class="sub" x="140" y="100" width="40" height="40" rx="6"/><text class="al" x="160" y="124" text-anchor="middle">3</text>
+  <text class="st" x="216" y="128" text-anchor="middle">…</text>
+  <rect class="sub" x="260" y="100" width="40" height="40" rx="6"/><text class="al" x="280" y="124" text-anchor="middle">19</text>
+  <rect class="sub-end" x="320" y="100" width="40" height="40" rx="6"/><text class="al" x="340" y="124" text-anchor="middle" style="font-weight:600">20</text>
+
+  <line class="ln" x1="60" y1="120" x2="78" y2="120" marker-end="url(#ar2)"/>
+  <line class="ln" x1="120" y1="120" x2="138" y2="120" marker-end="url(#ar2)"/>
+  <line class="ln" x1="180" y1="120" x2="198" y2="120" marker-end="url(#ar2)"/>
+  <line class="ln" x1="234" y1="120" x2="258" y2="120" marker-end="url(#ar2)"/>
+  <line class="ln" x1="300" y1="120" x2="318" y2="120" marker-end="url(#ar2)"/>
+  <path class="ln" d="M 90 100 C 90 70, 110 70, 110 98" marker-end="url(#ar2)"/>
+  <text class="al" x="100" y="64" text-anchor="middle">stays</text>
+
+  <line class="ln" x1="360" y1="120" x2="448" y2="120" marker-end="url(#ar2)"/>
+  <text class="al" x="404" y="96" text-anchor="middle">exits towards</text>
+  <text class="al" x="404" y="108" text-anchor="middle">A or D</text>
+
+  <line class="ln" x1="20" y1="158" x2="360" y2="158"/>
+  <line class="ln" x1="20" y1="153" x2="20" y2="163"/>
+  <line class="ln" x1="360" y1="153" x2="360" y2="163"/>
+  <text class="al" x="190" y="178" text-anchor="middle">minimum duration: 20 frames = 0.8 s</text>
+  <text class="mut" x="190" y="194" text-anchor="middle">(for D there are 50 sub-states: 2 s)</text>
+
+  <text class="mut" x="20" y="236">Curve = stays in the same sub-state. Arrow = advances to the next.</text>
+  <text class="mut" x="20" y="251">No jump backwards, and it exits only from the last sub-state.</text>
+  <text class="mut" x="20" y="274">A possession lasts at least 20 frames: a single frame cannot</text>
+  <text class="mut" x="20" y="289">create a possession, which removes the flicker that inflates possessions.</text>
+
+  <!-- three-state graph -->
+  <circle class="s-h" cx="610" cy="130" r="34"/><text class="l-h" x="610" y="138" text-anchor="middle">H</text>
+  <circle class="s-a" cx="900" cy="130" r="34"/><text class="l-a" x="900" y="138" text-anchor="middle">A</text>
+  <circle class="s-d" cx="755" cy="262" r="34"/><text class="l-d" x="755" y="270" text-anchor="middle">D</text>
+
+  <path class="ln" d="M 642 112 Q 755 70 868 112" marker-end="url(#ar2)"/>
+  <path class="ln" d="M 868 148 Q 755 190 642 148" marker-end="url(#ar2)"/>
+  <text class="al" x="755" y="62" text-anchor="middle">direct change of possession</text>
+
+  <path class="ln" d="M 618 163 Q 640 235 722 249" marker-end="url(#ar2)"/>
+  <path class="ln" d="M 735 230 Q 676 196 648 158" marker-end="url(#ar2)"/>
+  <text class="al" x="552" y="250">stoppage</text>
+  <text class="al" x="552" y="262">and restart</text>
+
+  <path class="ln" d="M 892 163 Q 870 235 788 249" marker-end="url(#ar2)"/>
+  <path class="ln" d="M 775 230 Q 834 196 862 158" marker-end="url(#ar2)"/>
+  <text class="al" x="975" y="250" text-anchor="end">stoppage</text>
+  <text class="al" x="975" y="262" text-anchor="end">and restart</text>
+
+  <text class="mut" x="560" y="322">How likely each arrow is, is counted on the IDSSE training matches</text>
+  <text class="mut" x="560" y="337">(with pseudo-count 1), not chosen by hand. It fires after the minimum duration.</text>
+</svg>
+    </div></div>
+    <figcaption>Left: how the minimum duration is imposed. Right: which moves between states the HMM can make. The probability of each move comes from the data, the minimum duration (0.8 s for H and A, 2 s for D) is set a priori.</figcaption>
+  </figure>
+
+  <div class="prose" style="display:flex;flex-direction:column;gap:14px">
+    <h3>How D is recognised</h3>
+    <p>Model 3b decides it, frame by frame, reading the rule layers as clues. Then the HMM prevents stoppages under 2 s, which would split a possession of the same team in two. With the rules as the only source of D the HMM drops to spellF1 0.563 (degraded) and 0.696 (clean), so learned D matters.</p>
+    <h3>How H and A are recognised</h3>
+    <p>Model 3a decides it on live frames. A team weighs on a frame if it has just controlled the ball, if its collective shape is that of the attacking team, or if in the last second the two teams swapped roles. A real change needs several pieces of evidence in a row: in the two-state model of section 16, flipping took about 7 frames (0.3 s) with P = 0.8 against, or about 1 s with P = 0.6.</p>
+    <h3>What it does when the ball is not seen</h3>
+    <p>It is the most frequent case (40.7% of the frames) and there are four mechanisms. Control votes decay over time instead of disappearing suddenly. The collective shape does not depend on the ball. Model 3b has as inputs how long the ball has been unseen and where it was last seen. The HMM, with durations and transitions, covers the short gaps. Filling the gaps with a straight line did not help (at most +0.005): 75% of the frames without a ball in BAR-ATH lie in gaps longer than 15 s.</p>
+  </div>
+</section>
+
+<section>
+  <h2>What the numbers say</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Metric</th><th>Rules only</th><th>D rules + team model</th><th>H/A/D HMM</th></tr></thead>
+      <tbody>
+        <tr><td>spellF1 · IDSSE degraded</td><td>0.4808</td><td>0.5521</td><td class="best">0.5895</td></tr>
+        <tr><td>spellF1 · IDSSE clean</td><td>0.6064</td><td>0.6934</td><td class="best">0.7137</td></tr>
+        <tr><td>spellF1 · IDSSE with team swaps</td><td>0.4529</td><td>0.5296</td><td class="best">0.5639</td></tr>
+        <tr><td>transF1@25 · degraded</td><td>0.386</td><td>0.501</td><td class="best">0.546</td></tr>
+        <tr class="pub"><td>spellF1 · public window</td><td>0.4706</td><td class="best">0.6815</td><td>0.6194</td></tr>
+        <tr class="pub"><td>macroF1 · public window</td><td>0.8643</td><td class="best">0.8889</td><td>0.8521</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="prose" style="color:var(--muted);font-size:0.9rem">The IDSSE rows are all leave one match out: each match is scored by a model trained on the other six. The two grey rows are the 5-minute public window (17 possessions), looked at only once after the choices. On IDSSE the HMM beats the team model in 7 matches out of 7 (degraded) and 6 out of 7 (clean).</p>
+
+  <div class="prose" style="display:flex;flex-direction:column;gap:14px">
+    <h3>Limits to keep in mind</h3>
+    <p><strong>Domain gap.</strong> On the public window the F1 of D is 0.750 against 0.822 of the rules, and on the whole of BAR-ATH the HMM writes less D (39.9% against 43.6%). The classifier learned from IDSSE degraded with a simulation, and the real tracker of BAR-ATH loses the ball in a different way. With 17 possessions it is a warning, not a verdict.</p>
+    <p><strong>Too few possessions.</strong> On BAR-ATH the HMM produces 301 possessions against the 317 of the rules. The largest margin, according to the oracle of section 20, lies in the changes the model does not find, not in their date.</p>
+    <p><strong>State of the work.</strong> At this snapshot the HMM is not the default CSV (<code>hmm3.enabled</code> is <code>false</code>) and sections 19-21 of the report are provisional.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Glossary</h2>
+  <dl class="gloss">
+    <div><dt>ATD</dt><dd>The automatic tracking file supplied by the challenge: position of players and ball for every frame.</dd></div>
+    <div><dt>BAR-ATH</dt><dd>The match of the challenge (Barcelona-Athletic). It has public labels only for the first 5 minutes.</dd></div>
+    <div><dt>Bakis</dt><dd>"Left to right" topology: you can stay or go forward, never back. Here it imposes the minimum duration of a state.</dd></div>
+    <div><dt>DFL</dt><dd>Deutsche Fußball Liga. Its labels (<code>BallPossession</code>, <code>BallStatus</code>) come with the IDSSE matches.</dd></div>
+    <div><dt>degraded / clean</dt><dd>IDSSE degraded to resemble the tracker of BAR-ATH (ball gaps, broken tracks) and original IDSSE. "ts" adds simulated team swaps.</dd></div>
+    <div><dt>Emission</dt><dd>The evidence that a state produces what we observe in a frame. Here it comes from the two logistic regressions.</dd></div>
+    <div><dt>Feature</dt><dd>A number computed from the data and fed to the model (for example the centroid of the team).</dd></div>
+    <div><dt>Forward-backward (mpm)</dt><dd>Computes for each frame the probability of each state looking at past and future, and picks the most probable. With the best weights it gives the same result as Viterbi.</dd></div>
+    <div><dt>HMM</dt><dd>Hidden Markov Model: sequence model with hidden states, probabilities of going from one to another and probabilities that each state produces what is observed.</dd></div>
+    <div><dt>IDSSE</dt><dd>The 7 Bundesliga matches with DFL labels used to train and validate. They are other matches, so allowed by the rules.</dd></div>
+    <div><dt>IoU</dt><dd>Intersection over Union: how much a predicted possession and a true one overlap in time (shared duration divided by total duration).</dd></div>
+    <div><dt>L2</dt><dd>Penalty on large weights, which makes training stable. It equals a Gaussian prior on the weights.</dd></div>
+    <div><dt>Latency</dt><dd>By how many frames, on average, the predicted change comes before or after the true one.</dd></div>
+    <div><dt>Law 9</dt><dd>Law of the Game on the ball in and out of play: the ball is out only when it has wholly crossed the line.</dd></div>
+    <div><dt>LOMO</dt><dd>Leave-one-match-out: train on six matches and score on the seventh, in turn.</dd></div>
+    <div><dt>macroF1</dt><dd>Unweighted mean of the F1 of H, A and D, frame by frame. It measures whether the label is right on the right frame.</dd></div>
+    <div><dt>MAP</dt><dd>Maximum a posteriori: an estimate that uses a prior. The pseudo-count 1 (Dirichlet) avoids transitions with zero probability.</dd></div>
+    <div><dt>Prior</dt><dd>How often a class appears in general. It is subtracted (in log) so as not to favour the most common class.</dd></div>
+    <div><dt>Logistic regression</dt><dd>Weighted sum of the features passed through a sigmoid: it returns a probability.</dd></div>
+    <div><dt>Smart Tagging</dt><dd>Automatic tags of set pieces, in intervals (phases) of about 35 s that start a few seconds before the restart.</dd></div>
+    <div><dt>spellF1</dt><dd>The ranking metric. A possession is a continuous run of H or A. Predicted possessions are matched one to one with true ones by IoU and the F1 is averaged over thresholds 0.3, 0.4, 0.5, 0.6 and 0.7. Each possession counts once.</dd></div>
+    <div><dt>transF1@25</dt><dd>F1 on state changes, with a tolerance of ±25 frames (about 1 s).</dd></div>
+    <div><dt>Viterbi</dt><dd>Algorithm that finds the sequence of states with the highest total probability.</dd></div>
+    <div><dt>X</dt><dd>Abstention allowed in the file. For spellF1 it equals repeating the last label given, for macroF1 it is an error.</dd></div>
+  </dl>
+</section>
+
+<footer>
+  Sources: <code>HMM_first_imp/REPORT_B.md</code> (sections 8-17, 19-21), <code>HMM_first_imp/REPORT_HMM_v0.md</code> (section 8, Bakis chains), <code>EVALUATION.md</code> (metrics). Contacts and duels: Vidal-Codina et al., arXiv 2202.00804.
+</footer>
+
+</div>
+
+</body>
+</html>

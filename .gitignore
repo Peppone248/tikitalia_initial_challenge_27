@@ -72,3 +72,14 @@ outputs/
 *.pkl
 .ipynb_checkpoints/
 .env
+
+# Extra virtual environments (the training and detector ones), detector weights, audio and raw arrays.
+venv_*/
+runs/
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.npy
+*.flac
+*.wav
