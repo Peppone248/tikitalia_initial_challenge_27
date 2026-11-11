@@ -83,3 +83,16 @@ runs/
 *.npy
 *.flac
 *.wav
+
+# -- ball detection ----------------------------------------------------------------------------
+
+# Data and local tooling (heavy, regenerated). data/* above is anchored to the repo root, so the
+# detector's own data/ needs its own line.
+ball_detection/data/
+ball_detection/local/
+ball_detection/**/*.cache
+
+# Weights: *.pt is ignored everywhere (above); only our own models are versioned, the others are
+# downloaded (see ball_detection/weights/README.md).
+!ball_detection/weights/tikitalia_model.pt
+!ball_detection/weights/tikitalia_tiles.pt
