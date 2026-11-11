@@ -1,0 +1,11 @@
+# Python 3.11. Pinned versions: the ones the results were produced with.
+#
+# PyTorch must be installed first, in the build that suits your GPU (https://pytorch.org/get-started/locally/).
+# The results were produced with the CUDA 13.2 build:
+#   pip install torch==2.15.0 torchvision==0.29.2 --index-url https://download.pytorch.org/whl/cu132
+ultralytics==8.4.202
+opencv-python==5.0.0.93
+numpy==2.4.6
+pandas==3.1.1
+SoccerNet==0.2.0   # only to download the dataset (data_prep/prepare_soccernet.py)
+gdown==6.5.1       # only to download the Roboflow weights (weights/README.md)
