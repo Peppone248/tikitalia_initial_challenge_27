@@ -1,0 +1,6 @@
+# Every constant of the module, with its reason.
+fps: 25                  # frame rate of the project and of IDSSE
+min_run_frames: 25       # 1 s: a team run shorter than this between two runs of the other team is a flip artefact
+default_length: 105.0    # m, used when the source reports no pitch size (pitch_x == 0)
+default_width: 68.0      # m, same reason
+labels: {H: 0, A: 1, D: 2, X: 3}   # same codes as evaluation/possession_metrics.label_codes

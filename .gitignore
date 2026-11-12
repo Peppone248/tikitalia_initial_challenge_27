@@ -96,3 +96,8 @@ ball_detection/**/*.cache
 # downloaded (see ball_detection/weights/README.md).
 !ball_detection/weights/tikitalia_model.pt
 !ball_detection/weights/tikitalia_tiles.pt
+
+# sequence_model: local env, downloaded data, training runs
+sequence_model/.venv/
+sequence_model/data/
+sequence_model/runs/
