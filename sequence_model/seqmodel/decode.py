@@ -8,7 +8,17 @@ from .match import CFG
 
 _C = CFG["decode"]
 _FPS = CFG["fps"]
-_MIN = np.array([_C["min_frames"][k] for k in "HAD"])
+
+
+def _check_min(mn):
+    """A 1-state chain would be both first and last sub-state, which the transitions do not support."""
+    mn = np.asarray(mn)
+    if (mn < 2).any():
+        raise ValueError(f"decode.min_frames must be >= 2 for every state: {mn.tolist()}")
+    return mn
+
+
+_MIN = _check_min([_C["min_frames"][k] for k in "HAD"])
 _START = np.r_[0, np.cumsum(_MIN)[:-1]]           # first sub-state of each chain
 _LAST = _START + _MIN - 1                         # last sub-state of each chain
 _CHAIN = np.repeat(np.arange(3), _MIN)            # chain of each expanded state
@@ -80,6 +90,7 @@ def decode(p, p_change, period, w=1.0, beta=0.0, trans=None, prior=None):
     T = len(p)
     tr = default_trans() if trans is None else trans
     pr = np.full(3, 1 / 3) if prior is None else np.asarray(prior, dtype=np.float64)
+    pr = np.clip(pr, _C["prior_floor"], None)           # an absent class must not give log(0)
     logem = w * (np.log(np.clip(p, 0, None) + _C["eps"]) - np.log(pr))
     if p_change is None or beta == 0:
         mult = np.ones(T)

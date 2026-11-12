@@ -81,3 +81,25 @@ def test_numpy_predictor_lomo(synthetic_match):
     assert NumpyTCNPredictor.decode_output is True
     df = lomo(ms, lambda: NumpyTCNPredictor(0, SMALL), seed=1, cfg=CFG["degrade"], use_change=True)
     assert len(df) == 3 and df.spellF1.between(0, 1).all()
+
+
+def test_predict_match_uses_loaded_odd_mask(exported, synthetic_match):
+    net, path = exported
+    z = dict(np.load(path))
+    z["odd"] = np.zeros(F, dtype=bool)                  # no odd channel: swap becomes the identity
+    other = str(__import__("pathlib").Path(path).with_name("w2.npz"))
+    np.savez(other, **z)
+    m = synthetic_match(0, 600)
+    a, _ = NumpyTCN.load(path).predict_match(m, round_outputs=False)
+    b, _ = NumpyTCN.load(other).predict_match(m, round_outputs=False)
+    assert not np.allclose(a, b)                        # the module ODD would have given a == b
+
+
+def test_stale_weights_fail_loudly(exported, tmp_path):
+    _, path = exported
+    z = dict(np.load(path))
+    z["n_in"] = np.array(F + 1)
+    bad = str(tmp_path / "stale.npz")
+    np.savez(bad, **z)
+    with pytest.raises(ValueError, match="stale weights"):
+        NumpyTCN.load(bad)

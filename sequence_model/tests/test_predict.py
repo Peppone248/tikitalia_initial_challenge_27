@@ -88,6 +88,10 @@ def test_predict_deterministic(synthetic_match, weights, tmp_path):
     for d in ("a", "b"):
         mod.run(weights, str(src), str(tmp_path / d))
     assert (tmp_path / "a" / "labels.csv").read_bytes() == (tmp_path / "b" / "labels.csv").read_bytes()
+    za, zb = np.load(tmp_path / "a" / "probs.npz"), np.load(tmp_path / "b" / "probs.npz")
+    assert za.files == zb.files
+    for k in za.files:
+        assert za[k].tobytes() == zb[k].tobytes()
 
 
 def _fake_dataset(n, blocks_n=None):

@@ -17,6 +17,10 @@ sys.path.insert(0, os.path.join(_REPO, "evaluation"))
 import possession_metrics as pm  # noqa: E402
 
 
+def _log(msg):
+    print(msg, file=sys.stderr, flush=True)
+
+
 class Baseline50:
     """Team of the tracked player nearest to the ball (D where the ball is unseen), then a centred
     majority vote over +-50 frames within each period. One-hot output, no decoding."""
@@ -62,12 +66,19 @@ def select_decoder(betas, ws):
     """Pick (beta, w) by mean spellF1 on the training matches, predicted by the already fitted
     network (in-sample, no retraining), then decode the held-out match with it."""
     def f(c):
-        cache = []
-        for t in c.train:
-            p3, pc = c.pred.predict(t)
-            if not np.isfinite(p3).all() or (pc is not None and not np.isfinite(pc).all()):
-                raise ValueError(f"non-finite probabilities for training match {t.name}")
-            cache.append((t, p3, pc, controlled_labels(t.label)))
+        t0 = time.time()
+        if c.inner is None:         # shared by every select_decoder of the fold: the network is the same
+            cache = []
+            for t in c.train:
+                p3, pc = c.pred.predict(t)
+                if not np.isfinite(p3).all() or (pc is not None and not np.isfinite(pc).all()):
+                    raise ValueError(f"non-finite probabilities for training match {t.name}")
+                cache.append((t, p3, pc, controlled_labels(t.label)))
+            c.inner = cache
+            _log(f"  [select_decoder] inner predictions on {len(c.train)} training matches: "
+                 f"{time.time() - t0:.1f}s")
+        cache = c.inner
+        t0 = time.time()
         best, best_s = None, -np.inf
         for beta in betas:
             for w in ws:
@@ -79,6 +90,8 @@ def select_decoder(betas, ws):
         if best is None:
             raise ValueError("select_decoder: every inner spellF1 score is NaN")
         beta, w = best
+        _log(f"  [select_decoder] grid {len(betas)}x{len(ws)} over {len(cache)} matches: "
+             f"{time.time() - t0:.1f}s -> beta={beta:g} w={w:g}")
         return decode(c.p3, c.pc, c.test.period, w=w, beta=beta, trans=c.trans,
                       prior=c.prior), dict(beta=float(beta), w=float(w))
     return f
@@ -95,6 +108,8 @@ def lomo_multi(matches, make_predictor, seed, cfg, decoders, progress=None):
         train = [deg[j] for j in range(len(matches)) if j != i]
         test = deg[i]
         pred = make_predictor().fit(train)
+        t1 = time.time()
+        _log(f"  [fold {m.name}] fit: {t1 - t0:.1f}s")
         p3, pc = pred.predict(test)
         if not np.isfinite(p3).all():
             raise ValueError(f"non-finite probabilities for held-out match {m.name}")
@@ -105,16 +120,22 @@ def lomo_multi(matches, make_predictor, seed, cfg, decoders, progress=None):
             labs = [controlled_labels(t.label) for t in train]
             allv = np.concatenate([l[l <= 2] for l in labs])
             prior = np.bincount(allv, minlength=3)[:3] / len(allv)
+            if getattr(pred, "prior_corrected", False):
+                prior = None        # the net was trained with inverse-frequency class weights: its
+                #                     output is already roughly prior-free, do not correct it twice
             trans = count_transitions(labs, [t.period for t in train])
         ctx = SimpleNamespace(pred=pred, train=train, test=test, p3=p3, pc=pc, trans=trans,
-                              prior=prior)
+                              prior=prior, inner=None)
         gt = controlled_labels(m.label)
+        t2 = time.time()
+        _log(f"  [fold {m.name}] test-match predict: {t2 - t1:.1f}s")
         for k, dec in decoders.items():
             out, info = dec(ctx)
             r = pm.evaluate(gt, np.asarray(out, dtype=gt.dtype))
             rows[k].append(dict(match=m.name, spellF1=r["spell_f1_mean"], macroF1=r["macro_f1"],
                                 n_pred_poss=r["n_pred_spells"], n_true_poss=r["n_gt_spells"],
                                 transF1_25=r["transitions"][25]["f1"], **info))
+        _log(f"  [fold {m.name}] test-match decode(s): {time.time() - t2:.1f}s")
         if progress is not None:
             progress(m.name, time.time() - t0)
     return {k: pd.DataFrame(v) for k, v in rows.items()}

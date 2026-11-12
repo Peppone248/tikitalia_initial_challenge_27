@@ -247,3 +247,50 @@ def test_select_decoder_nonfinite_inner_and_nan_scores(synthetic_match):
             return p3, pc
     with pytest.raises(ValueError, match="non-finite"):
         lomo_multi(ms, Bad, seed=1, cfg=CFG["degrade"], decoders={"b": select_decoder([0], [1.0])})
+
+
+def test_lomo_prior_uniform_for_prior_corrected_predictor(synthetic_match, monkeypatch):
+    import seqmodel.evaluate as ev
+    ms = _three(synthetic_match, 800)
+    seen = []
+    real = ev.plain_decoder
+
+    class Plain(_Counting):
+        pass
+
+    class Corrected(_Counting):
+        prior_corrected = True
+
+    def spy_decode(p, pc, per, **kw):
+        seen.append(kw["prior"])
+        return np.zeros(len(p), dtype=np.int8)
+
+    monkeypatch.setattr(ev, "decode", spy_decode)
+    lomo(ms, Corrected, seed=1, cfg=CFG["degrade"], use_change=False)
+    assert len(seen) == 3 and all(p is None for p in seen)
+    seen.clear()
+    lomo(ms, Plain, seed=1, cfg=CFG["degrade"], use_change=False)
+    assert len(seen) == 3 and all(p is not None and abs(p.sum() - 1) < 1e-9 for p in seen)
+
+
+def test_tcn_predictors_are_prior_corrected():
+    pytest.importorskip("torch")
+    from seqmodel.infer import NumpyTCNPredictor
+    from seqmodel.tcn import TCNPredictor
+    assert TCNPredictor.prior_corrected and NumpyTCNPredictor.prior_corrected
+    assert not getattr(FrameModel, "prior_corrected", False)
+
+
+def test_select_decoder_w_only(synthetic_match):
+    from seqmodel.evaluate import lomo_multi, select_decoder
+    res = lomo_multi(_three(synthetic_match, 800), _Counting, seed=1, cfg=CFG["degrade"],
+                     decoders={"b": select_decoder([0], [0.5, 1.0])})["b"]
+    assert (res.beta == 0).all() and res.w.isin([0.5, 1.0]).all()
+
+
+def test_select_decoders_share_inner_predictions(synthetic_match):
+    from seqmodel.evaluate import lomo_multi, select_decoder
+    _Recorder.calls = []
+    lomo_multi(_three(synthetic_match, 800), _Recorder, seed=1, cfg=CFG["degrade"],
+               decoders={"a": select_decoder([0], [0.5, 1.0]), "b": select_decoder([0, 5], [0.5, 1.0])})
+    assert len(_Recorder.calls) == 3 * (1 + 2)          # per fold: held-out once + 2 training matches once

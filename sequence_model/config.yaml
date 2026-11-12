@@ -31,6 +31,7 @@ decode:                  # 3-state HMM decoder (decode.py)
   stop_extra_s: 12       # a priori: a stoppage lasts on average 12 s beyond its minimum (D->H, D->A share this, half each)
   eps: 1.0e-6            # added to probabilities before the log: exact 0 must not give -inf
   max_exit: 0.5          # cap on the total per-frame exit probability of a state: keeps self-loops in (0,1) even with degenerate rates (e.g. count_transitions with no exposure gives 1); each of the two exits is capped at half
+  prior_floor: 1.0e-4    # lower bound of the class prior in the emission: a class absent from the training matches would give log(0) = -inf; 1e-4 caps its boost at ~9 nats
   rate_floor: 1.0e-12    # lower bound of every transition rate: log(0) must not occur
 frame_model:             # per-frame logistic regression (frame_model.py)
   l2: 1.0                # ridge penalty on the weights (not the intercepts), on the summed log-loss: mild shrinkage, a-priori value

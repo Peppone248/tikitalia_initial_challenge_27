@@ -7,6 +7,8 @@ def test_criterion():
     good = [0.03, 0.02, 0.01, 0.02, 0.0, -0.01, 0.02]            # mean 0.0128, 5 positive
     assert criterion({1: good, 2: good}) is True
     assert criterion({}) is False
+    assert criterion({1: good}) is False                          # one seed is not enough
+    assert criterion({1: good, 2: good[:6]}) is False             # fewer than 7 paired matches
     # 4 positive + 1 zero, mean above 0.01: > 0 is required, not >= 0
     assert criterion({1: [0.1, 0.1, 0.1, 0.1, 0.0, 0.0, 0.0], 2: good}) is False
     # mean exactly 0.01 in each seed with 5 positives passes
@@ -33,3 +35,8 @@ def test_render_verdict_and_deltas():
     assert text.rstrip().splitlines()[-1] == "criterion: NON SODDISFATTO"
     assert "in-sample" in text
     assert "0/7" in text and "7/7" in text            # better/worse counts
+
+
+def test_render_single_seed_has_no_verdict():
+    one = pd.concat([_df("frame", 1, [0.4] * 7), _df("tcn_change", 1, [0.9] * 7).assign(beta=5.0, w=1.0)])
+    assert render(one).rstrip().splitlines()[-1] == "criterion: needs at least 2 seeds"

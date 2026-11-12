@@ -86,3 +86,16 @@ def test_degenerate_trans_from_counts():
     p = np.random.default_rng(1).dirichlet([1, 1, 1], 300)
     out = decode(p, np.random.default_rng(2).random(300), np.ones(300), beta=5.0, trans=t)
     assert out.dtype == np.int8 and set(np.unique(out)) <= {0, 1, 2}
+
+
+def test_min_frames_guard():
+    from seqmodel.decode import _check_min
+    with pytest.raises(ValueError, match=">= 2"):
+        _check_min([20, 1, 50])
+    assert _check_min([2, 2, 2]).tolist() == [2, 2, 2]
+
+
+def test_absent_class_prior_is_finite():
+    p = np.tile([0.5, 0.4, 0.1], (300, 1))
+    out = decode(p, None, np.ones(300), prior=[0.6, 0.4, 0.0])    # D never seen in training
+    assert out.dtype == np.int8 and set(np.unique(out)) <= {0, 1, 2}

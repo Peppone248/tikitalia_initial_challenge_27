@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 
-from .features import ODD, frame_features
+from .features import FEATURES, ODD, frame_features
 from .match import CFG
 from .tcn import TCNPredictor, _period_slices, export_weights
 
@@ -34,6 +34,10 @@ class NumpyTCN:
         self.levels, self.kernel = int(z["levels"]), int(z["kernel"])
         self.mu, self.sd = z["mu"].astype(np.float64), z["sd"].astype(np.float64)
         self.odd = z["odd"].astype(bool)
+        n_in = int(z["n_in"])
+        if n_in != len(FEATURES) or len(self.odd) != len(FEATURES):
+            raise ValueError(f"weights expect {n_in} input features but this code produces "
+                             f"{len(FEATURES)}: stale weights, retrain")
         f = lambda k: z[k].astype(np.float64)          # noqa: E731
         self.inp = (f("inp.w"), f("inp.b"))
         self.blocks = [(f(f"l{i}.conv.w"), f(f"l{i}.conv.b"), f(f"l{i}.pw.w"), f(f"l{i}.pw.b"))
@@ -75,13 +79,14 @@ class NumpyTCN:
         X = frame_features(m)
         p3, pc = np.zeros((len(X), 3)), np.zeros(len(X))
         for a, b in _period_slices(m.period):
-            p3[a:b], pc[a:b] = self.predict(X[a:b], ODD, round_outputs)
+            p3[a:b], pc[a:b] = self.predict(X[a:b], self.odd, round_outputs)
         return p3, pc
 
 
 class NumpyTCNPredictor:
     """Predictor protocol; trains with train_tcn but predicts through NumpyTCN (the submission path)."""
     decode_output = True
+    prior_corrected = True      # see TCNPredictor
 
     def __init__(self, seed, cfg=None):
         self.seed, self.cfg = seed, CFG["tcn"] if cfg is None else cfg

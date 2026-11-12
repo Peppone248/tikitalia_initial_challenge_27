@@ -4,6 +4,8 @@ config.yaml `tcn` for every constant. Each period is its own sequence: no window
 crosses a period boundary. Features are standardised like FrameModel (odd columns scale only), so
 a team swap is an exact negation of the odd input channels."""
 import copy
+import sys
+import time
 
 import numpy as np
 import torch
@@ -159,7 +161,8 @@ def train_tcn(matches, cfg, seed):
     best, best_state, bad = np.inf, copy.deepcopy(model.state_dict()), 0
     steps = max(1, cfg["windows_per_epoch"] // cfg["batch"])
     model.train()
-    for _ in range(cfg["max_epochs"]):
+    for epoch in range(cfg["max_epochs"]):
+        t_ep, tl = time.time(), 0.0
         for _ in range(steps):
             x, y, c = batch(cfg["batch"])
             if rng.random() < cfg["swap_p"]:
@@ -167,9 +170,13 @@ def train_tcn(matches, cfg, seed):
                 x[:, odd, :] *= -1
                 y = torch.where(y == 0, 1, torch.where(y == 1, 0, y))
             opt.zero_grad()
-            _loss(model, x, y, c, w3, pos_weight, cfg["change_weight"]).backward()
+            loss = _loss(model, x, y, c, w3, pos_weight, cfg["change_weight"])
+            loss.backward()
             opt.step()
+            tl += float(loss.detach()) / steps
         v = val_loss()
+        print(f"  [train_tcn] epoch {epoch + 1}/{cfg['max_epochs']} train_loss {tl:.4f} "
+              f"val_loss {v:.4f} {time.time() - t_ep:.1f}s", file=sys.stderr, flush=True)
         if v < best:
             best, best_state, bad = v, copy.deepcopy(model.state_dict()), 0
         else:
@@ -196,6 +203,7 @@ def export_weights(model, path):
 class TCNPredictor:
     """Predictor protocol (fit(list[Match]) -> self, predict(Match) -> (p3, p_change))."""
     decode_output = True
+    prior_corrected = True      # trained with inverse-frequency class weights: do not subtract the prior again
 
     def __init__(self, seed, cfg=None):
         self.seed, self.cfg = seed, _C if cfg is None else cfg
