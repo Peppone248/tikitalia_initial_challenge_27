@@ -4,15 +4,17 @@ from seqmodel.report import criterion, render
 
 
 def test_criterion():
-    good = [0.03, 0.02, 0.01, 0.02, 0.0, -0.01, 0.02]
+    good = [0.03, 0.02, 0.01, 0.02, 0.0, -0.01, 0.02]            # mean 0.0128, 5 positive
     assert criterion({1: good, 2: good}) is True
-    assert criterion({1: good, 2: [0.1, 0.1, 0.1, 0.1, -0.5, -0.5, -0.5]}) is False   # 4 positive
-    assert criterion({1: [0.0] * 7, 2: [0.0] * 7}) is False                          # mean 0
-    assert criterion({1: [0.01] * 7, 2: [0.005] * 7}) is False                       # mean .0075 < .01
-    assert criterion({1: [-0.2, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05],
-                      2: [0.05] * 7}) is True            # mean exactly 0.0 + ... above 0.01? yes
-    assert criterion({1: [0.2, 0.2, 0.2, 0.2, 0.2, -2, -2], 2: good}) is False        # mean < .01
     assert criterion({}) is False
+    # 4 positive + 1 zero, mean above 0.01: > 0 is required, not >= 0
+    assert criterion({1: [0.1, 0.1, 0.1, 0.1, 0.0, 0.0, 0.0], 2: good}) is False
+    # mean exactly 0.01 in each seed with 5 positives passes
+    assert criterion({1: [0.01] * 7, 2: [0.01] * 7}) is True
+    # pooled mean 0.015 would pass, but seed 2 has mean 0.0
+    assert criterion({1: [0.03] * 7, 2: [0.01, 0.01, 0.01, 0.01, 0.01, -0.025, -0.025]}) is False
+    assert criterion({1: [0.01] * 7, 2: [0.005] * 7}) is False  # seed 2 mean below threshold
+    assert criterion({1: [0.2] * 5 + [-2, -2], 2: good}) is False  # seed 1 mean negative
 
 
 def _df(model, seed, vals):

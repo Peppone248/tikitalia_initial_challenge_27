@@ -65,15 +65,19 @@ def select_decoder(betas, ws):
         cache = []
         for t in c.train:
             p3, pc = c.pred.predict(t)
+            if not np.isfinite(p3).all() or (pc is not None and not np.isfinite(pc).all()):
+                raise ValueError(f"non-finite probabilities for training match {t.name}")
             cache.append((t, p3, pc, controlled_labels(t.label)))
-        best, best_s = None, -1.0
+        best, best_s = None, -np.inf
         for beta in betas:
             for w in ws:
                 s = np.mean([pm.evaluate(gt, np.asarray(
                     decode(p3, pc, t.period, w=w, beta=beta, trans=c.trans, prior=c.prior),
                     dtype=gt.dtype))["spell_f1_mean"] for t, p3, pc, gt in cache])
-                if s > best_s:
+                if np.isfinite(s) and s > best_s:
                     best, best_s = (beta, w), s
+        if best is None:
+            raise ValueError("select_decoder: every inner spellF1 score is NaN")
         beta, w = best
         return decode(c.p3, c.pc, c.test.period, w=w, beta=beta, trans=c.trans,
                       prior=c.prior), dict(beta=float(beta), w=float(w))

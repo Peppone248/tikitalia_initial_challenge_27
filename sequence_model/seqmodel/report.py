@@ -6,13 +6,15 @@ MIN_MEAN, MIN_POS = 0.01, 5
 
 
 def criterion(deltas):
-    """deltas {seed: [per-match spellF1 delta vs frame]}: True iff the mean over all deltas is
-    >= 0.01 and every seed has >= 5 matches with a positive delta."""
+    """deltas {seed: [per-match spellF1 delta vs frame]}: True iff in EVERY seed the mean delta is
+    >= 0.01 and at least 5 matches have a strictly positive delta."""
     if not deltas:
         return False
-    allv = np.concatenate([np.asarray(v, dtype=float) for v in deltas.values()])
-    return bool(allv.mean() >= MIN_MEAN - 1e-12
-                and all((np.asarray(v) > 0).sum() >= MIN_POS for v in deltas.values()))
+    for v in deltas.values():
+        v = np.asarray(v, dtype=float)
+        if len(v) == 0 or not (v.mean() >= MIN_MEAN - 1e-12 and (v > 0).sum() >= MIN_POS):
+            return False
+    return True
 
 
 def render(df, ref="frame", cand="tcn_change"):

@@ -186,3 +186,64 @@ def test_lomo_unchanged_signature(synthetic_match):
     df = lomo(_three(synthetic_match, 800), Baseline50, seed=1, cfg=CFG["degrade"], use_change=False)
     assert list(df.columns) == ["match", "spellF1", "macroF1", "n_pred_poss", "n_true_poss",
                                 "transF1_25"]
+
+
+class _Recorder:
+    decode_output = True
+    calls = []
+
+    def fit(self, train):
+        self.train_ids = {id(t) for t in train}
+        return self
+
+    def predict(self, m):
+        type(self).calls.append((id(self), id(m)))
+        p = np.full((len(m.label), 3), 0.2)
+        p[:, 0] = 0.6
+        return p, np.zeros(len(m.label))
+
+
+def test_select_decoder_does_not_touch_other_data(synthetic_match):
+    from seqmodel.evaluate import lomo_multi, select_decoder
+    ms = _three(synthetic_match, 800)
+    _Recorder.calls = []
+    preds = []
+
+    def make():
+        preds.append(_Recorder())
+        return preds[-1]
+
+    spy = select_decoder([0, 5], [1.0])
+
+    def dec(c):
+        c.test_id = id(c.test)
+        n0 = len(_Recorder.calls)
+        out = spy(c)
+        inner = [m for p, m in _Recorder.calls[n0:] if p == id(c.pred)]
+        assert set(inner) == {id(t) for t in c.train} and len(inner) == len(c.train)
+        assert id(c.test) not in inner
+        return out
+
+    lomo_multi(ms, make, seed=1, cfg=CFG["degrade"], decoders={"b": dec})
+    for p in preds:
+        heldout = [m for q, m in _Recorder.calls if q == id(p)]
+        assert len(heldout) == 1 + 2                   # held-out once + 2 training matches in selection
+        assert heldout[0] not in p.train_ids           # first call is the held-out match
+
+
+def test_select_decoder_nonfinite_inner_and_nan_scores(synthetic_match):
+    import pytest
+    from seqmodel.evaluate import lomo_multi, select_decoder
+    ms = _three(synthetic_match, 800)
+
+    class Bad(_Recorder):
+        n = 0
+
+        def predict(self, m):
+            p3, pc = super().predict(m)
+            type(self).n += 1
+            if type(self).n > 1:                       # first call is the held-out match
+                p3[0, 0] = np.nan
+            return p3, pc
+    with pytest.raises(ValueError, match="non-finite"):
+        lomo_multi(ms, Bad, seed=1, cfg=CFG["degrade"], decoders={"b": select_decoder([0], [1.0])})
