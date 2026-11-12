@@ -85,3 +85,73 @@ def load_idsse(path):
                   home_attacks_right={})
     m.home_attacks_right = attack_direction(m)
     return m
+
+
+# Period codes of frames outside the two graded halves (before kick-off, half-time, after the
+# final whistle): their own values so that decoding and the TCN never run across half-time.
+_PRE, _BREAK, _POST = 0, 3, 4
+
+
+def match_from_atd(ds, pitch, blocks, name="atd"):
+    """kloppy TrackingDataset (coordinates normalised 0-1, metrica convention) -> Match in metres
+    with origin at the centre, x = (x01 - 0.5) * length, y = (y01 - 0.5) * width (the same axis
+    scaling as starter/baseline.py). Row i = video frame i = frame_id - 1; missing -> NaN; label all X.
+    pitch = (length, width) in metres; blocks = [(half, first_video_frame, last_video_frame)]
+    in play order: frames of half h get period h, the others _PRE / _BREAK / _POST."""
+    length, width = float(pitch[0]), float(pitch[1])
+    home_team = ds.metadata.teams[0]
+    players = [p for t in ds.metadata.teams for p in t.players]      # one entry per track slot
+    team = np.array([0 if t is home_team else 1 for t in ds.metadata.teams for _ in t.players],
+                    dtype=np.int8)
+    ids = np.array([int(r.frame_id) - 1 for r in ds.records])
+    if ids.min() < 0:
+        raise ValueError("ATD frame ids must start from 1")
+    T = int(ids.max()) + 1
+    px = np.full((T, len(players)), np.nan, dtype=np.float32)
+    py = np.full_like(px, np.nan)
+    bx, by = np.full(T, np.nan), np.full(T, np.nan)
+    col = {p: i for i, p in enumerate(players)}
+    for r, i in zip(ds.records, ids):
+        for p, d in r.players_data.items():
+            c = d.coordinates
+            if c is not None and p in col:
+                px[i, col[p]] = (c.x - 0.5) * length
+                py[i, col[p]] = (c.y - 0.5) * width
+        if r.ball_coordinates is not None:
+            bx[i] = (r.ball_coordinates.x - 0.5) * length
+            by[i] = (r.ball_coordinates.y - 0.5) * width
+    period = np.empty(T, dtype=np.int8)
+    last = -1
+    period[:] = _PRE
+    for k, (half, a, b) in enumerate(blocks):
+        period[a:b + 1] = half
+        if k > 0:
+            period[last + 1:a] = _BREAK
+        last = b
+    period[last + 1:] = _POST
+    m = Match(name=name, px=px, py=py, team=team, ball_x=bx, ball_y=by, period=period,
+              label=np.full(T, X, dtype=np.int8), length=length, width=width, home_attacks_right={})
+    g = np.isin(period, [h for h, _, _ in blocks])
+    sub = Match(name=name, px=px[g], py=py[g], team=team, ball_x=bx[g], ball_y=by[g], period=period[g],
+                label=m.label[g], length=length, width=width, home_attacks_right={})
+    m.home_attacks_right = {int(p): True for p in np.unique(period)}      # outside the halves: never used
+    m.home_attacks_right.update(attack_direction(sub))
+    return m
+
+
+def load_atd(path_xml, path_txt):
+    """The provided ATD (FIFA/EPTS xml + txt) as a Match, read through starter/load_atd.py (kloppy).
+    Pitch size and graded halves come from games.py. The record count is checked against the video."""
+    import sys
+    root = os.path.dirname(_ROOT)
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    import games
+    from starter import load_atd as starter
+    from kloppy import metrica
+    ds = metrica.load_tracking_epts(meta_data=path_xml, raw_data=path_txt)
+    rep = starter.check_alignment(ds)
+    if not rep["agrees"]:
+        raise ValueError(f"ATD is not one record per video frame from 1: {rep}")
+    return match_from_atd(ds, games.GAMES[games.GAME]["pitch"], games.half_video_blocks(games.GAME),
+                          name=os.path.splitext(os.path.basename(path_xml))[0])

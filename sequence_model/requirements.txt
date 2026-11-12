@@ -3,3 +3,6 @@ pandas
 pyyaml
 pytest
 torch  # CPU build; needed only for training the TCN (seqmodel/tcn.py)
+
+# needed only to read the provided ATD (seqmodel.match.load_atd, via starter/load_atd.py)
+kloppy==3.18.0
