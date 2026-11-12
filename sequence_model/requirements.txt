@@ -2,3 +2,4 @@ numpy
 pandas
 pyyaml
 pytest
+torch  # CPU build; needed only for training the TCN (seqmodel/tcn.py)

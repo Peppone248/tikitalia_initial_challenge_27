@@ -10,6 +10,16 @@ _C = CFG["frame_model"]
 L2, STEP, MAX_ITER, TOL = _C["l2"], _C["step"], _C["max_iter"], _C["tol"]
 
 
+def fit_standardiser(X):
+    """(mu, sd) of the feature columns: odd columns scale only (no centring), so negating them
+    stays an exact team swap; even columns are centred and scaled. Constant columns get sd 1."""
+    X = np.asarray(X, dtype=np.float64)
+    mu = X.mean(axis=0)
+    mu[ODD] = 0.0
+    sd = np.sqrt(((X - mu) ** 2).mean(axis=0))
+    return mu, np.where(sd > 1e-9, sd, 1.0)
+
+
 def _softmax(z):
     z = z - z.max(axis=1, keepdims=True)
     e = np.exp(z)
@@ -28,10 +38,7 @@ class FrameModel:
 
     def _fit_xy(self, X, y):
         X, y = np.asarray(X, dtype=np.float64), np.asarray(y)
-        mu = X.mean(axis=0)
-        mu[ODD] = 0.0                       # odd columns: scale only, so the swap stays exact
-        sd = np.sqrt(((X - mu) ** 2).mean(axis=0))
-        self.mu, self.sd = mu, np.where(sd > 1e-9, sd, 1.0)
+        self.mu, self.sd = fit_standardiser(X)
         Z = self._standardise(X)
         Zs = Z.copy()
         Zs[:, ODD] *= -1

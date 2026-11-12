@@ -36,3 +36,17 @@ frame_model:             # per-frame logistic regression (frame_model.py)
   tol: 1.0e-8            # Newton stops when the largest parameter step is below this
 baseline50:              # reference predictor (evaluate.py)
   half_window: 50        # frames each side of the majority vote (+-2 s at 25 fps): the reference smoothing
+tcn:                     # bidirectional temporal convolutional network (tcn.py)
+  channels: 32           # width of every layer: small, the training set is only a few matches
+  levels: 6              # dilations 1..32 with kernel 5: receptive field +-126 frames (+-5 s) around each frame
+  kernel: 5              # odd, so "same" padding is symmetric (non-causal: looks backward and forward)
+  window: 1500           # frames (60 s) per training window, always inside a single period
+  batch: 8               # windows per gradient step
+  lr: 1.0e-3             # Adam learning rate
+  windows_per_epoch: 200 # one "epoch" = 200 random windows (25 steps): a fixed budget, independent of match length
+  max_epochs: 15         # hard cap on training length
+  patience: 3            # epochs without improvement of the held-out loss before stopping
+  change_k: 12           # frames: the change head fires within +-12 frames (0.5 s) of a direct H<->A change
+  change_weight: 0.5     # weight of the change-head BCE relative to the H/A/D cross-entropy
+  swap_p: 0.5            # probability of the team-swap augmentation on each batch
+  threads: 4             # torch CPU threads
