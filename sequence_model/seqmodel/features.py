@@ -94,8 +94,7 @@ def _team_block(px, py, vx, vy, sgn, bx, by):
     return out
 
 
-def frame_features(m):
-    """(T, len(FEATURES)) float32, always finite."""
+def _period_features(m):
     T = len(m.period)
     ball_x, ball_y = np.asarray(m.ball_x, float), np.asarray(m.ball_y, float)
     seen = np.isfinite(ball_x) & np.isfinite(ball_y)
@@ -107,7 +106,8 @@ def frame_features(m):
 
     bvx = _vel(np.where(seen, ball_x, np.nan))
     bvy = _vel(np.where(seen, ball_y, np.nan))
-    ball_speed = np.nan_to_num(np.hypot(bvx, bvy)) * seen
+    bsp = np.nan_to_num(np.hypot(bvx, bvy))
+    ball_speed = np.where(seen & (bsp <= FC["max_ball_speed"]), bsp, 0.0)   # glitch -> neutral 0
 
     hl, hw = m.length / 2, m.width / 2
     line_dist = np.minimum(hl - np.abs(bx), hw - np.abs(by))
@@ -116,6 +116,9 @@ def frame_features(m):
 
     px, py = m.px.astype(np.float64), m.py.astype(np.float64)
     vx, vy = _vel(px), _vel(py)
+    with np.errstate(invalid="ignore"):
+        bad = np.hypot(vx, vy) > FC["max_player_speed"]       # impossible speed = unknown
+    vx, vy = np.where(bad, np.nan, vx), np.where(bad, np.nan, vy)
     home_right = np.array([m.home_attacks_right[int(p)] for p in m.period], dtype=bool)
     sg_h = np.where(home_right, 1.0, -1.0)
     blocks = []
@@ -134,3 +137,16 @@ def frame_features(m):
     for k in h:
         cols[k] = h[k] - a[k]
     return np.stack([cols[f] for f in FEATURES], axis=1).astype(np.float32)
+
+
+def frame_features(m):
+    """(T, len(FEATURES)) float32, always finite. Each period is an independent sequence:
+    smoothing, velocities, last-seen ball and absence counter never cross half-time."""
+    out = np.zeros((len(m.period), len(FEATURES)), dtype=np.float32)
+    for per in np.unique(m.period):
+        sel = m.period == per
+        sub = dataclasses.replace(
+            m, px=m.px[sel], py=m.py[sel], ball_x=np.asarray(m.ball_x)[sel],
+            ball_y=np.asarray(m.ball_y)[sel], period=m.period[sel], label=m.label[sel])
+        out[sel] = _period_features(sub)
+    return out

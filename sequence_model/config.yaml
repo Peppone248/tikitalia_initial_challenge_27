@@ -19,3 +19,5 @@ features:
   near_radii: [3, 8]     # m, pressure radii around the ball (a-priori: playing distance and zone of influence)
   neutral_nearest: 50    # m, nearest-player distance when a team has no tracked player (far away, no pressure)
   shape_quantiles: [0.1, 0.9]   # robust extent of a team (width, length) ignoring outliers such as the keeper
+  max_player_speed: 12   # m/s, human sprint limit (same as V_PLAYER_MAX of the team's model); faster is a tracking glitch and counts as unknown
+  max_ball_speed: 40     # m/s, physical limit of a kicked ball (same as the ball detector's); faster is a glitch and gives the neutral speed 0

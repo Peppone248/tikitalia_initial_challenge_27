@@ -55,7 +55,7 @@ def test_no_nan_all_players_missing(synthetic_match):
 
 
 def test_long_ball_gap(synthetic_match):
-    m = synthetic_match(3, 1800)
+    m = synthetic_match(3, 4000)     # gap inside period 1 (frames 0-1999)
     m.ball_x[100:1600] = np.nan
     m.ball_y[100:1600] = np.nan
     f = frame_features(m)
@@ -73,7 +73,8 @@ def test_ball_unseen_uses_last_position(synthetic_match):
     f = frame_features(m)
     i = FEATURES.index("ball_x_att")
     assert np.allclose(f[200:300, i], f[199, i])
-    assert np.allclose(f[300:400, i], -f[199, i])     # period 2 attacks the other way
+    assert np.allclose(f[300:400, i], 0.0)     # period 2: nothing seen yet -> centre spot, no memory
+    assert np.allclose(f[300:400, FEATURES.index('ball_unseen_s')][0], 1 / 25)
     assert (f[200:400, FEATURES.index("ball_speed")] == 0).all()
     assert np.isclose(f[199, i], bx[199])
 
@@ -104,3 +105,30 @@ def test_definitions_simple():
     assert f["centroid_x"] == pytest.approx(-80 / 3 - (-90 / 3))
     assert f["ball_line_dist"] == pytest.approx(34.0)
     assert f["mean_speed_all"] == 0 and f["slow_unseen"] == 0 and f["ball_seen"] == 1
+
+
+def test_period_boundary_resets(synthetic_match):
+    m = synthetic_match(5, 600)           # period 2 starts at frame 300
+    m.px[:300] += 10.0                    # a jump at the boundary must not leak into speeds
+    m.ball_x[:], m.ball_y[:] = np.nan, np.nan
+    m.ball_x[290:300], m.ball_y[290:300] = 5.0, 5.0
+    f = frame_features(m)
+    i = FEATURES.index("ball_unseen_s")
+    assert f[299, i] == 0 and f[300, i] == pytest.approx(1 / 25)
+    assert f[299, FEATURES.index("ball_seen")] == 1 and f[300, FEATURES.index("ball_x_att")] == 0
+    # first frames of period 2 equal the features of period 2 computed alone
+    m2 = synthetic_match(5, 600)
+    m2.ball_x[:], m2.ball_y[:] = np.nan, np.nan
+    m2.ball_x[290:300], m2.ball_y[290:300] = 5.0, 5.0
+    g = frame_features(m2)
+    assert np.allclose(f[300:, FEATURES.index("mean_speed_all")], g[300:, FEATURES.index("mean_speed_all")])
+
+
+def test_impossible_speeds_are_excluded(synthetic_match):
+    m = synthetic_match(6, 400)
+    m.px[100, 3] += 500.0                 # one-frame teleport of one player
+    m.ball_x[:150] = np.where(np.arange(150) == 50, m.ball_x[50] + 300, m.ball_x[:150])
+    f = frame_features(m)
+    assert f[:, FEATURES.index("ball_speed")].max() <= 40
+    assert f[:, FEATURES.index("mean_speed_all")].max() <= 12
+    assert f[:, FEATURES.index("mean_speed")].max() <= 12
