@@ -21,3 +21,9 @@ features:
   shape_quantiles: [0.1, 0.9]   # robust extent of a team (width, length) ignoring outliers such as the keeper
   max_player_speed: 12   # m/s, human sprint limit (same as V_PLAYER_MAX of the team's model); faster is a tracking glitch and counts as unknown
   max_ball_speed: 40     # m/s, physical limit of a kicked ball (same as the ball detector's); faster is a glitch and gives the neutral speed 0
+decode:                  # 3-state HMM decoder (decode.py)
+  min_frames: {H: 20, A: 20, D: 50}   # 0.8 s / 0.8 s / 2 s: shortest plausible possession and stoppage; enforced by chains of that many sub-states
+  change_every_s: 20     # a priori: a possession change H<->A every 20 s of possession (default transition rate)
+  stop_every_s: 30       # a priori: a stoppage every 30 s of play (H->D, A->D default rate)
+  stop_extra_s: 12       # a priori: a stoppage lasts on average 12 s beyond its minimum (D->H, D->A share this, half each)
+  eps: 1.0e-6            # added to probabilities before the log: exact 0 must not give -inf
