@@ -108,7 +108,8 @@ def _fake_dataset(n, blocks_n=None):
 
 def test_match_from_atd_conversion():
     ds = _fake_dataset(12)
-    m = match_from_atd(ds, (100.0, 50.0), [(1, 2, 4), (2, 7, 9)])
+    m = match_from_atd(ds, (100.0, 50.0), [(1, 2, 4), (2, 7, 9)], min_mean_tracked=1)
+    assert m.graded_periods == (1, 2)
     assert m.px.shape == (12, 3) and m.team.tolist() == [0, 1, 1]
     assert np.allclose(m.px[3, 0], 0.003 * 100) and np.allclose(m.py[:, 0], -12.5)
     assert np.isnan(m.px[:, 1]).all() and np.allclose(m.px[:, 2], -50) and np.allclose(m.py[:, 2], 25)
@@ -116,3 +117,30 @@ def test_match_from_atd_conversion():
     assert (m.label == CFG["labels"]["X"]).all() and m.length == 100.0 and m.width == 50.0
     assert m.period.tolist() == [0, 0, 1, 1, 1, 3, 3, 2, 2, 2, 4, 4]
     assert set(m.home_attacks_right) == {0, 1, 2, 3, 4}
+
+
+def test_match_from_atd_unmatched_players_raises():
+    ds = _fake_dataset(12)
+
+    class Q:
+        pass
+    for r in ds.records:                      # record keys no longer match the metadata players
+        r.players_data = {Q(): v for v in r.players_data.values()}
+    with pytest.raises(ValueError, match="implausible"):
+        match_from_atd(ds, (100.0, 50.0), [(1, 2, 4), (2, 7, 9)], min_mean_tracked=1)
+
+
+def test_match_from_atd_default_threshold_raises_on_sparse_tracking():
+    with pytest.raises(ValueError, match="implausible"):
+        match_from_atd(_fake_dataset(12), (100.0, 50.0), [(1, 2, 4), (2, 7, 9)])
+
+
+def test_predict_uses_match_graded_periods(synthetic_match, weights, tmp_path, monkeypatch):
+    m = dataclasses.replace(synthetic_match(2, 900), graded_periods=(2,))
+    mod = _load_script()
+    monkeypatch.setattr(mod, "load_idsse", lambda p: m)
+    src = tmp_path / "m.npz"
+    src.write_bytes(b"")
+    mod.run(weights, str(src), str(tmp_path / "o"))
+    labs = np.array(_check(tmp_path / "o", 900))
+    assert (labs[m.period == 1] == "X").all() and "X" not in labs[m.period == 2]

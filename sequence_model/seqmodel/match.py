@@ -25,6 +25,7 @@ class Match:
     length: float
     width: float
     home_attacks_right: dict  # {period: bool}, True when home attacks towards +x
+    graded_periods: tuple = (1, 2)  # periods whose frames are graded; the others are written as X
 
 
 def controlled_labels(label, min_frames=None):
@@ -92,12 +93,14 @@ def load_idsse(path):
 _PRE, _BREAK, _POST = 0, 3, 4
 
 
-def match_from_atd(ds, pitch, blocks, name="atd"):
+def match_from_atd(ds, pitch, blocks, name="atd", min_mean_tracked=None, min_tracked_share=None):
     """kloppy TrackingDataset (coordinates normalised 0-1, metrica convention) -> Match in metres
     with origin at the centre, x = (x01 - 0.5) * length, y = (y01 - 0.5) * width (the same axis
     scaling as starter/baseline.py). Row i = video frame i = frame_id - 1; missing -> NaN; label all X.
     pitch = (length, width) in metres; blocks = [(half, first_video_frame, last_video_frame)]
     in play order: frames of half h get period h, the others _PRE / _BREAK / _POST."""
+    min_mean_tracked = CFG["atd"]["min_mean_tracked"] if min_mean_tracked is None else min_mean_tracked
+    min_tracked_share = CFG["atd"]["min_tracked_share"] if min_tracked_share is None else min_tracked_share
     length, width = float(pitch[0]), float(pitch[1])
     home_team = ds.metadata.teams[0]
     players = [p for t in ds.metadata.teams for p in t.players]      # one entry per track slot
@@ -116,6 +119,7 @@ def match_from_atd(ds, pitch, blocks, name="atd"):
             c = d.coordinates
             if c is not None and p in col:
                 px[i, col[p]] = (c.x - 0.5) * length
+                # y sign is irrelevant: every feature uses y only through |y|, differences or hypot
                 py[i, col[p]] = (c.y - 0.5) * width
         if r.ball_coordinates is not None:
             bx[i] = (r.ball_coordinates.x - 0.5) * length
@@ -130,8 +134,15 @@ def match_from_atd(ds, pitch, blocks, name="atd"):
         last = b
     period[last + 1:] = _POST
     m = Match(name=name, px=px, py=py, team=team, ball_x=bx, ball_y=by, period=period,
-              label=np.full(T, X, dtype=np.int8), length=length, width=width, home_attacks_right={})
-    g = np.isin(period, [h for h, _, _ in blocks])
+              label=np.full(T, X, dtype=np.int8), length=length, width=width, home_attacks_right={},
+              graded_periods=tuple(int(h) for h, _, _ in blocks))
+    g = np.isin(period, m.graded_periods)
+    n_tracked = np.isfinite(px[g]).sum(axis=1)
+    if g.any() and (n_tracked.mean() < min_mean_tracked or (n_tracked > 0).mean() < min_tracked_share):
+        raise ValueError(
+            f"ATD conversion implausible: {n_tracked.mean():.1f} tracked players per graded frame on "
+            f"average, {(n_tracked > 0).mean():.2f} of frames with any (need >= {min_mean_tracked} and "
+            f">= {min_tracked_share}): player slots probably not matched to the records")
     sub = Match(name=name, px=px[g], py=py[g], team=team, ball_x=bx[g], ball_y=by[g], period=period[g],
                 label=m.label[g], length=length, width=width, home_attacks_right={})
     m.home_attacks_right = {int(p): True for p in np.unique(period)}      # outside the halves: never used

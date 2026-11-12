@@ -15,7 +15,6 @@ from seqmodel.decode import decode  # noqa: E402
 from seqmodel.infer import NumpyTCN  # noqa: E402
 from seqmodel.match import CFG, load_atd, load_idsse  # noqa: E402
 
-GRADED_PERIODS = (1, 2)       # IDSSE: all frames of periods 1 and 2; ATD: the two halves of games.py
 _LETTER = {CFG["labels"][k]: k for k in "HADX"}
 
 
@@ -32,7 +31,7 @@ def run(weights, match_path, out, beta=0.0, w=1.0, trans=None, prior=None):
     m = load_match(match_path)
     p3, pc = NumpyTCN.load(weights).predict_match(m)
     lab = decode(p3, pc, m.period, w, beta, trans, prior).copy()
-    lab[~np.isin(m.period, GRADED_PERIODS)] = CFG["labels"]["X"]
+    lab[~np.isin(m.period, m.graded_periods)] = CFG["labels"]["X"]
     os.makedirs(out, exist_ok=True)
     np.savez(os.path.join(out, "probs.npz"), p_h=p3[:, 0].astype(np.float32),
              p_a=p3[:, 1].astype(np.float32), p_d=p3[:, 2].astype(np.float32),

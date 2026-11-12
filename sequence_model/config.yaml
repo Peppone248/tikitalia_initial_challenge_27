@@ -11,6 +11,9 @@ degrade:                 # makes clean external tracking look like the provided 
   player_drop_frac: 0.07 # share of each player's frames lost to broken tracks (short stretches of 1-10 s)
   player_drop_s: [1, 10] # s, min and max length of a lost-track stretch: automatic tracking loses a player for a few seconds at a time
   max_iter: 100000       # safety cap on gap/stretch draws; hitting it means a target is unreachable and raises
+atd:                     # plausibility of the provided automatic tracking after conversion (match.match_from_atd)
+  min_mean_tracked: 10   # mean tracked player slots per graded frame: the provided match averages ~20.5, so below 10 the conversion dropped coordinates (e.g. slots not matched)
+  min_tracked_share: 0.9 # share of graded frames with at least one tracked player: play is tracked almost everywhere in the halves
 features:
   smooth_frames: 5       # centred moving average on positions before differencing: tracking jitter would otherwise dominate speeds
   unseen_cap_s: 60       # s, the ball-absence counter saturates: beyond a minute the exact length carries no more information
