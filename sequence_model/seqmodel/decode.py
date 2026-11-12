@@ -27,10 +27,10 @@ def _viterbi(logem, ha, ah, tr):
     """logem (T,3); ha, ah (T,) exit rates H->A and A->H used for the step into each frame."""
     T = len(logem)
     em = logem[:, _CHAIN]
-    lo = 1e-12
-    hd, ad, dh, da = tr["HD"], tr["AD"], tr["DH"], tr["DA"]
-    ha = np.clip(ha, lo, 1 - hd - 1e-9)
-    ah = np.clip(ah, lo, 1 - ad - 1e-9)
+    lo, hi = _C["rate_floor"], _C["max_exit"] / 2
+    hd, ad, dh, da = (min(max(float(tr[k]), lo), hi) for k in ("HD", "AD", "DH", "DA"))
+    ha = np.clip(ha, lo, hi)
+    ah = np.clip(ah, lo, hi)
     l_ha, l_ah = np.log(ha), np.log(ah)
     l_hs, l_as = np.log1p(-(ha + hd)), np.log1p(-(ah + ad))
     l_hd, l_ad, l_dh, l_da = np.log(hd), np.log(ad), np.log(dh), np.log(da)

@@ -20,11 +20,14 @@ def onehot(lab, conf=0.9):
 
 
 def test_min_durations():
-    lab = np.tile(np.r_[np.zeros(5, int), np.ones(5, int)], 40)
-    lab[100:110] = 2
-    out = decode(onehot(lab, 0.6), None, np.ones(len(lab)))
-    for c, n in runs(out)[1:-1]:
+    lab = np.r_[np.zeros(100), np.ones(8), np.zeros(100), np.ones(100), np.full(30, 2),
+                np.ones(100), np.zeros(100), np.full(60, 2), np.zeros(100)].astype(int)
+    out = decode(onehot(lab, 0.95), None, np.ones(len(lab)))
+    r = runs(out)
+    assert len(r) > 1
+    for c, n in r[1:-1]:
         assert n >= (50 if c == 2 else 20)
+    assert (out != lab).any()  # the short blips were really overruled
 
 
 def test_constant_probs_no_change():
@@ -75,3 +78,11 @@ def test_count_transitions():
     per = np.r_[np.ones(100), 2 * np.ones(40)]
     t2 = count_transitions([np.r_[np.zeros(100), np.ones(40)]], [per])
     assert t2["HA"] == pytest.approx(1 / (80 + 1))
+
+
+def test_degenerate_trans_from_counts():
+    t = count_transitions([np.zeros(100, int)], [np.ones(100)])
+    assert t["AH"] == 1.0 and t["DH"] == 1.0
+    p = np.random.default_rng(1).dirichlet([1, 1, 1], 300)
+    out = decode(p, np.random.default_rng(2).random(300), np.ones(300), beta=5.0, trans=t)
+    assert out.dtype == np.int8 and set(np.unique(out)) <= {0, 1, 2}
