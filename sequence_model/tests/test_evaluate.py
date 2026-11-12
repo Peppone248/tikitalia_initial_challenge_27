@@ -72,10 +72,11 @@ def test_baseline50_dead_where_ball_unseen():
 
 
 def test_baseline50_vote_does_not_cross_periods():
-    ball = [-9.0] * 200 + [11.0] * 200
-    per = [1] * 200 + [2] * 200
+    # asymmetric on purpose: 30 frames of H then 200 of A; a vote crossing the boundary flips period 1
+    ball = [-9.0] * 30 + [11.0] * 200
+    per = [1] * 30 + [2] * 200
     out = _b50(_tiny(ball, per))
-    assert (out[:200] == 0).all() and (out[200:] == 1).all()
+    assert (out[:30] == 0).all() and (out[30:] == 1).all()
     # within one period the vote smooths a short blip
     ball = [-9.0] * 100 + [11.0] * 5 + [-9.0] * 100
     assert (_b50(_tiny(ball)) == 0).all()
