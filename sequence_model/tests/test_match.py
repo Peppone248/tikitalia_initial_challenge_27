@@ -44,3 +44,24 @@ def test_load_idsse_roundtrip(tmp_path):
     assert m.label.tolist() == [H, A, X, D, D, A]
     assert (m.length, m.width) == (105.0, 68.0)
     assert m.px.shape == (T, P)
+    assert m.home_attacks_right == {1: True, 2: True}
+
+
+def test_attack_direction_nan_heavy_and_late_substitute():
+    import warnings
+    import pytest
+    from seqmodel.match import Match
+    T = 200
+    px = np.tile(np.array([-45.0, -20.0, -10.0, 45.0, 20.0, 10.0, 30.0], dtype=np.float32), (T, 1))
+    px[:, 2] = np.nan                       # always missing column
+    px[:100, 1] = np.nan                    # late substitute
+    px[:50, :] = np.nan                     # all-NaN frames
+    py = np.zeros((T, 7), dtype=np.float32)
+    m = Match("t", px, py, np.array([0, 0, 0, 1, 1, 1, 1], dtype=np.int8), np.zeros(T),
+              np.zeros(T), np.ones(T, dtype=np.int8), np.zeros(T, dtype=np.int8), 105.0, 68.0, {})
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert attack_direction(m) == {1: True}
+        m.px[:, :3] = np.nan
+        with pytest.raises(ValueError):
+            attack_direction(m)

@@ -43,16 +43,28 @@ def controlled_labels(label, min_frames=None):
     return out
 
 
+def _deep_sides(x, per, team_name):
+    """Median over the frames with a tracked player of the per-frame min and max x."""
+    ok = np.isfinite(x).any(axis=1)
+    if not ok.any():
+        raise ValueError(f"no tracked {team_name} player in period {per}")
+    x = x[ok]
+    lo = np.where(np.isfinite(x), x, np.inf).min(axis=1)
+    hi = np.where(np.isfinite(x), x, -np.inf).max(axis=1)
+    return float(np.median(lo)), float(np.median(hi))
+
+
 def attack_direction(m):
     """Per period: each team's deepest player (median over the period of the per-frame min/max
-    x) is its goalkeeper. Home attacks right (+x) if its goalkeeper side is at negative x."""
+    x) is its goalkeeper. Home attacks right (+x) if its goalkeeper side is at negative x.
+    Frames without a tracked player of a team are ignored; a team never tracked in a whole
+    period raises ValueError."""
     home, away = m.team == 0, m.team == 1
     result = {}
     for per in np.unique(m.period):
         sel = m.period == per
-        hx, ax = m.px[sel][:, home], m.px[sel][:, away]
-        h_neg, h_pos = np.nanmedian(np.nanmin(hx, axis=1)), np.nanmedian(np.nanmax(hx, axis=1))
-        a_neg, a_pos = np.nanmedian(np.nanmin(ax, axis=1)), np.nanmedian(np.nanmax(ax, axis=1))
+        h_neg, h_pos = _deep_sides(m.px[sel][:, home], per, "home")
+        a_neg, a_pos = _deep_sides(m.px[sel][:, away], per, "away")
         # keeper depth = distance from the centre of the deepest player on that side;
         # compare "home keeper left, away keeper right" with the mirrored hypothesis
         result[int(per)] = bool(abs(h_neg) + abs(a_pos) >= abs(h_pos) + abs(a_neg))
@@ -60,16 +72,16 @@ def attack_direction(m):
 
 
 def load_idsse(path):
-    z = np.load(path, allow_pickle=True)
-    poss = z["ball_possession"]
-    label = np.where(poss == 1, H, np.where(poss == 2, A, X)).astype(np.int8)
-    label[~z["ball_alive"].astype(bool)] = D
-    length = float(z["pitch_x"]) or CFG["default_length"]
-    width = float(z["pitch_y"]) or CFG["default_width"]
-    m = Match(name=os.path.splitext(os.path.basename(path))[0],
-              px=z["px"].astype(np.float32), py=z["py"].astype(np.float32),
-              team=z["player_team"].astype(np.int8), ball_x=z["ball_x"], ball_y=z["ball_y"],
-              period=z["period"].astype(np.int8), label=label, length=length, width=width,
-              home_attacks_right={})
+    with np.load(path) as z:
+        poss = z["ball_possession"]
+        label = np.where(poss == 1, H, np.where(poss == 2, A, X)).astype(np.int8)
+        label[~z["ball_alive"].astype(bool)] = D
+        length = float(z["pitch_x"]) or CFG["default_length"]
+        width = float(z["pitch_y"]) or CFG["default_width"]
+        m = Match(name=os.path.splitext(os.path.basename(path))[0],
+                  px=z["px"].astype(np.float32), py=z["py"].astype(np.float32),
+                  team=z["player_team"].astype(np.int8), ball_x=z["ball_x"], ball_y=z["ball_y"],
+                  period=z["period"].astype(np.int8), label=label, length=length, width=width,
+                  home_attacks_right={})
     m.home_attacks_right = attack_direction(m)
     return m

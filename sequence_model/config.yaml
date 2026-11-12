@@ -11,3 +11,11 @@ degrade:                 # makes clean external tracking look like the provided 
   player_drop_frac: 0.07 # share of each player's frames lost to broken tracks (short stretches of 1-10 s)
   player_drop_s: [1, 10] # s, min and max length of a lost-track stretch: automatic tracking loses a player for a few seconds at a time
   max_iter: 100000       # safety cap on gap/stretch draws; hitting it means a target is unreachable and raises
+features:
+  smooth_frames: 5       # centred moving average on positions before differencing: tracking jitter would otherwise dominate speeds
+  unseen_cap_s: 60       # s, the ball-absence counter saturates: beyond a minute the exact length carries no more information
+  slow_speed: 1.1        # m/s, mean speed of all players below which everybody is walking (dead-ball signature in the team reports)
+  out_margin: 0.5        # m, a-priori tolerance outside the touch/goal lines before the ball counts as out
+  near_radii: [3, 8]     # m, pressure radii around the ball (a-priori: playing distance and zone of influence)
+  neutral_nearest: 50    # m, nearest-player distance when a team has no tracked player (far away, no pressure)
+  shape_quantiles: [0.1, 0.9]   # robust extent of a team (width, length) ignoring outliers such as the keeper
