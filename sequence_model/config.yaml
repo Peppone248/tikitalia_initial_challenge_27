@@ -29,3 +29,10 @@ decode:                  # 3-state HMM decoder (decode.py)
   eps: 1.0e-6            # added to probabilities before the log: exact 0 must not give -inf
   max_exit: 0.5          # cap on the total per-frame exit probability of a state: keeps self-loops in (0,1) even with degenerate rates (e.g. count_transitions with no exposure gives 1); each of the two exits is capped at half
   rate_floor: 1.0e-12    # lower bound of every transition rate: log(0) must not occur
+frame_model:             # per-frame logistic regression (frame_model.py)
+  l2: 1.0                # ridge penalty on the weights (not the intercepts), on the summed log-loss: mild shrinkage, a-priori value
+  step: 3                # every 3rd frame of each training match: neighbouring frames are near-duplicates, 3x faster fit
+  max_iter: 50           # Newton iterations cap: the problem is convex and converges in far fewer
+  tol: 1.0e-8            # Newton stops when the largest parameter step is below this
+baseline50:              # reference predictor (evaluate.py)
+  half_window: 50        # frames each side of the majority vote (+-2 s at 25 fps): the reference smoothing

@@ -3,13 +3,11 @@ frame_features, with exact team-swap symmetry. Implements the predictor protocol
 (fit(list[Match]) -> self, predict(Match) -> (p3, p_change|None), decode_output)."""
 import numpy as np
 
-from .features import ODD, frame_features, swap_teams
+from .features import ODD, frame_features
 from .match import CFG, controlled_labels
 
-L2 = 1.0           # ridge penalty on the weights (not the intercepts), on the summed log-loss
-STEP = 3           # every 3rd frame of each training match: neighbouring frames are near-duplicates
-MAX_ITER = 50
-TOL = 1e-8
+_C = CFG["frame_model"]
+L2, STEP, MAX_ITER, TOL = _C["l2"], _C["step"], _C["max_iter"], _C["tol"]
 
 
 def _softmax(z):
@@ -89,4 +87,7 @@ class FrameModel:
         return self._fit_xy(np.vstack(Xs), np.concatenate(ys))
 
     def predict(self, m):
-        return self.predict_proba(frame_features(m)), None
+        p = self.predict_proba(frame_features(m))
+        if not np.isfinite(p).all():
+            raise ValueError("FrameModel.predict: non-finite probabilities")
+        return p, None

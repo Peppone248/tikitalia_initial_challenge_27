@@ -19,7 +19,7 @@ class Baseline50:
     """Team of the tracked player nearest to the ball (D where the ball is unseen), then a centred
     majority vote over +-50 frames within each period. One-hot output, no decoding."""
     decode_output = False
-    HALF = 50
+    HALF = CFG["baseline50"]["half_window"]
 
     def fit(self, train):
         return self
@@ -54,6 +54,8 @@ def lomo(matches, make_predictor, seed, cfg, use_change):
         test = deg[i]
         pred = make_predictor().fit(train)
         p3, pc = pred.predict(test)
+        if not np.isfinite(p3).all():
+            raise ValueError(f"non-finite probabilities for held-out match {m.name}")
         if pred.decode_output:
             labs = [controlled_labels(t.label) for t in train]
             periods = [t.period for t in train]
