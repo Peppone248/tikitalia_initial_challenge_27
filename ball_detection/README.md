@@ -7,6 +7,8 @@ This folder holds all the work on the ball, from data preparation to the final f
 frame-by-frame position. This README gives the overall picture and the main commands; each
 subfolder then has its own README with the details.
 
+The numbers obtained so far are summarised in [`RESULTS.md`](RESULTS.md).
+
 ## Structure
 
 The code is split by stage of the work, one folder each:
