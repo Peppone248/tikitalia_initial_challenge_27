@@ -2,6 +2,8 @@
 reference (nearest tracked player + majority vote)."""
 import os
 import sys
+import time
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -45,29 +47,75 @@ class Baseline50:
         return np.eye(3)[out], None
 
 
-def lomo(matches, make_predictor, seed, cfg, use_change):
-    rows = []
+def plain_decoder(use_change):
+    """Default decoding: argmax for one-hot predictors, otherwise decode() with beta=0 (or the
+    default beta when use_change). Returns (labels, info dict)."""
+    def f(c):
+        if not c.pred.decode_output:
+            return np.argmax(c.p3, axis=1), {}
+        return decode(c.p3, c.pc if use_change else None, c.test.period,
+                      trans=c.trans, prior=c.prior), {}
+    return f
+
+
+def select_decoder(betas, ws):
+    """Pick (beta, w) by mean spellF1 on the training matches, predicted by the already fitted
+    network (in-sample, no retraining), then decode the held-out match with it."""
+    def f(c):
+        cache = []
+        for t in c.train:
+            p3, pc = c.pred.predict(t)
+            cache.append((t, p3, pc, controlled_labels(t.label)))
+        best, best_s = None, -1.0
+        for beta in betas:
+            for w in ws:
+                s = np.mean([pm.evaluate(gt, np.asarray(
+                    decode(p3, pc, t.period, w=w, beta=beta, trans=c.trans, prior=c.prior),
+                    dtype=gt.dtype))["spell_f1_mean"] for t, p3, pc, gt in cache])
+                if s > best_s:
+                    best, best_s = (beta, w), s
+        beta, w = best
+        return decode(c.p3, c.pc, c.test.period, w=w, beta=beta, trans=c.trans,
+                      prior=c.prior), dict(beta=float(beta), w=float(w))
+    return f
+
+
+def lomo_multi(matches, make_predictor, seed, cfg, decoders, progress=None):
+    """Leave-one-match-out where each fold's predictor is fitted once and decoded by every entry of
+    decoders {name: f(ctx) -> (labels, info)}. Returns {name: DataFrame}. progress(match, seconds)
+    is called after every fold."""
+    rows = {k: [] for k in decoders}
     deg = {j: degrade(m, seed + j, cfg) for j, m in enumerate(matches)}
     for i, m in enumerate(matches):
-        tr_idx = [j for j in range(len(matches)) if j != i]
-        train = [deg[j] for j in tr_idx]
+        t0 = time.time()
+        train = [deg[j] for j in range(len(matches)) if j != i]
         test = deg[i]
         pred = make_predictor().fit(train)
         p3, pc = pred.predict(test)
         if not np.isfinite(p3).all():
             raise ValueError(f"non-finite probabilities for held-out match {m.name}")
+        if pc is not None and not np.isfinite(pc).all():
+            raise ValueError(f"non-finite p_change for held-out match {m.name}")
+        trans = prior = None
         if pred.decode_output:
             labs = [controlled_labels(t.label) for t in train]
-            periods = [t.period for t in train]
             allv = np.concatenate([l[l <= 2] for l in labs])
             prior = np.bincount(allv, minlength=3)[:3] / len(allv)
-            out = decode(p3, pc if use_change else None, test.period,
-                         trans=count_transitions(labs, periods), prior=prior)
-        else:
-            out = np.argmax(p3, axis=1)
+            trans = count_transitions(labs, [t.period for t in train])
+        ctx = SimpleNamespace(pred=pred, train=train, test=test, p3=p3, pc=pc, trans=trans,
+                              prior=prior)
         gt = controlled_labels(m.label)
-        r = pm.evaluate(gt, np.asarray(out, dtype=gt.dtype))
-        rows.append(dict(match=m.name, spellF1=r["spell_f1_mean"], macroF1=r["macro_f1"],
-                         n_pred_poss=r["n_pred_spells"], n_true_poss=r["n_gt_spells"],
-                         transF1_25=r["transitions"][25]["f1"]))
-    return pd.DataFrame(rows)
+        for k, dec in decoders.items():
+            out, info = dec(ctx)
+            r = pm.evaluate(gt, np.asarray(out, dtype=gt.dtype))
+            rows[k].append(dict(match=m.name, spellF1=r["spell_f1_mean"], macroF1=r["macro_f1"],
+                                n_pred_poss=r["n_pred_spells"], n_true_poss=r["n_gt_spells"],
+                                transF1_25=r["transitions"][25]["f1"], **info))
+        if progress is not None:
+            progress(m.name, time.time() - t0)
+    return {k: pd.DataFrame(v) for k, v in rows.items()}
+
+
+def lomo(matches, make_predictor, seed, cfg, use_change, progress=None):
+    return lomo_multi(matches, make_predictor, seed, cfg, {"x": plain_decoder(use_change)},
+                      progress)["x"]

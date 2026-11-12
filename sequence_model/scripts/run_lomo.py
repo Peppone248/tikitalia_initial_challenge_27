@@ -11,14 +11,27 @@ import pandas as pd
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from seqmodel.evaluate import Baseline50, lomo  # noqa: E402
+from seqmodel.evaluate import (Baseline50, lomo_multi, plain_decoder,  # noqa: E402
+                               select_decoder)
 from seqmodel.frame_model import FrameModel  # noqa: E402
+from seqmodel.infer import NumpyTCNPredictor  # noqa: E402
 from seqmodel.match import CFG, load_idsse  # noqa: E402
+from seqmodel.report import criterion, render  # noqa: E402,F401
 
-# name -> (predictor factory, use_change); add new models here
+BETAS, WS = [0, 5, 20, 50], [0.5, 1.0]
+
+# model name -> (group, decoder factory). Models of one group share a single fit per fold and seed.
+# The factory for tcn takes the seed because the predictor is seeded.
 MODELS = {
-    "baseline50": (Baseline50, False),
-    "frame": (FrameModel, False),
+    "baseline50": ("baseline50", lambda: plain_decoder(False)),
+    "frame": ("frame", lambda: plain_decoder(False)),
+    "tcn": ("tcn", lambda: plain_decoder(False)),
+    "tcn_change": ("tcn", lambda: select_decoder(BETAS, WS)),
+}
+GROUPS = {
+    "baseline50": lambda seed: Baseline50(),
+    "frame": lambda seed: FrameModel(),
+    "tcn": lambda seed: NumpyTCNPredictor(seed),
 }
 
 
@@ -30,26 +43,17 @@ def main():
     a = ap.parse_args()
     matches = [load_idsse(p) for p in sorted(glob.glob(os.path.join(a.data, "*.npz")))]
     out = []
-    for name in a.models:
-        make, use_change = MODELS[name]
+    for group in dict.fromkeys(MODELS[n][0] for n in a.models):
+        names = [n for n in a.models if MODELS[n][0] == group]
         for seed in a.seeds:
-            t0 = time.time()
-            df = lomo(matches, make, seed, CFG["degrade"], use_change)
-            print(f"{name} seed {seed}: {time.time() - t0:.0f}s", file=sys.stderr)
-            out.append(df.assign(model=name, seed=seed))
+            def progress(match, sec, group=group, seed=seed):
+                print(f"[{group} seed {seed}] held-out {match}: {sec:.0f}s", file=sys.stderr,
+                      flush=True)
+            res = lomo_multi(matches, lambda: GROUPS[group](seed), seed, CFG["degrade"],
+                             {n: MODELS[n][1]() for n in names}, progress)
+            out += [d.assign(model=n, seed=seed) for n, d in res.items()]
     df = pd.concat(out)
-    cols = ["spellF1", "macroF1", "n_pred_poss", "n_true_poss", "transF1_25"]
-    lines = []
-    for (name, seed), g in df.groupby(["model", "seed"], sort=False):
-        lines += [f"### {name}, seed {seed}", "", "| match | " + " | ".join(cols) + " |",
-                  "|" + "---|" * (len(cols) + 1)]
-        for _, r in g.iterrows():
-            lines.append(f"| {r['match']} | " + " | ".join(
-                f"{r[c]:.3f}" if c in ("spellF1", "macroF1", "transF1_25") else f"{int(r[c])}"
-                for c in cols) + " |")
-        lines.append("| **mean** | " + " | ".join(f"{g[c].mean():.3f}" for c in cols) + " |")
-        lines.append("")
-    text = "\n".join(lines)
+    text = render(df)
     print(text)
     os.makedirs(os.path.join(ROOT, "runs"), exist_ok=True)
     fn = f"lomo_{'-'.join(a.models)}_{'-'.join(map(str, a.seeds))}.md"

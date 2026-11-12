@@ -133,3 +133,56 @@ def test_frame_model_symmetric(synthetic_match):
     Xs[:, ODD] *= -1
     p, ps = fm.predict_proba(X), fm.predict_proba(Xs)
     assert np.allclose(p, ps[:, [1, 0, 2]], atol=1e-12)
+
+
+class _InfPChange:
+    decode_output = True
+
+    def fit(self, train):
+        return self
+
+    def predict(self, m):
+        pc = np.zeros(len(m.label))
+        pc[3] = np.inf
+        return np.full((len(m.label), 3), 1 / 3), pc
+
+
+def test_nonfinite_p_change_raises(synthetic_match):
+    with pytest.raises(ValueError, match="non-finite"):
+        lomo(_three(synthetic_match, 800), _InfPChange, seed=1, cfg=CFG["degrade"], use_change=True)
+
+
+class _Counting:
+    decode_output = True
+    fits = 0
+
+    def fit(self, train):
+        type(self).fits += 1
+        return self
+
+    def predict(self, m):
+        p = np.full((len(m.label), 3), 0.2)
+        p[:, 0] = 0.6
+        return p, np.zeros(len(m.label))
+
+
+def test_lomo_multi_fits_once_and_reports(synthetic_match):
+    from seqmodel.evaluate import lomo_multi, select_decoder, plain_decoder
+    ms = _three(synthetic_match, 800)
+    seen = []
+    _Counting.fits = 0
+    res = lomo_multi(ms, _Counting, seed=1, cfg=CFG["degrade"],
+                     decoders={"a": plain_decoder(False),
+                               "b": select_decoder([0, 5], [0.5, 1.0])},
+                     progress=lambda name, sec: seen.append(name))
+    assert _Counting.fits == 3                       # one fit per fold, shared by both decodings
+    assert set(res) == {"a", "b"} and all(len(d) == 3 for d in res.values())
+    assert {"beta", "w"} <= set(res["b"].columns)
+    assert res["b"].beta.isin([0, 5]).all() and res["b"].w.isin([0.5, 1.0]).all()
+    assert seen == [m.name for m in ms]
+
+
+def test_lomo_unchanged_signature(synthetic_match):
+    df = lomo(_three(synthetic_match, 800), Baseline50, seed=1, cfg=CFG["degrade"], use_change=False)
+    assert list(df.columns) == ["match", "spellF1", "macroF1", "n_pred_poss", "n_true_poss",
+                                "transF1_25"]
