@@ -14,7 +14,7 @@ def _draw_gap_s(rng, quantiles):
     return rng.uniform(quantiles[i], quantiles[i + 1])
 
 
-def _hide_live_gaps(rng, hidden, live, target, quantiles, fps):
+def _hide_live_gaps(rng, hidden, live, target, quantiles, fps, max_iter):
     """Cut gaps at random live positions until the share of live frames seen is <= target;
     the last gap is clipped so the share lands on the target."""
     n_live = int(live.sum())
@@ -22,13 +22,14 @@ def _hide_live_gaps(rng, hidden, live, target, quantiles, fps):
         return
     live_idx = np.flatnonzero(live)
     T = len(hidden)
-    for _ in range(100000):
+    for _ in range(max_iter):
         need = int((~hidden & live).sum()) - int(round(target * n_live))
         if need <= 0:
             return
         length = min(max(1, int(round(_draw_gap_s(rng, quantiles) * fps))), need)
         start = int(rng.choice(live_idx))
         hidden[start:min(T, start + length)] = True
+    raise RuntimeError(f"live_seen_target {target} not reached in {max_iter} gaps")
 
 
 def degrade(m, seed, cfg):
@@ -48,7 +49,8 @@ def degrade(m, seed, cfg):
 
     # live ball: gaps until the seen share of live frames reaches the target
     live = ~is_d
-    _hide_live_gaps(rng, hidden, live, cfg["live_seen_target"], cfg["live_gap_s"], fps)
+    _hide_live_gaps(rng, hidden, live, cfg["live_seen_target"], cfg["live_gap_s"], fps,
+                    cfg["max_iter"])
 
     ball_x, ball_y = m.ball_x.astype(float).copy(), m.ball_y.astype(float).copy()
     ball_x[hidden] = np.nan
@@ -56,17 +58,21 @@ def degrade(m, seed, cfg):
 
     # players: short random stretches of lost tracking
     px, py = m.px.copy(), m.py.copy()
+    lo_s, hi_s = cfg["player_drop_s"]
     for j in range(px.shape[1]):
         orig_nan = np.isnan(px[:, j]) | np.isnan(py[:, j])
         drop = np.zeros(T, dtype=bool)
         target = int(round(cfg["player_drop_frac"] * (~orig_nan).sum()))
-        for _ in range(100000):
+        for _ in range(cfg["max_iter"]):
             need = target - int((drop & ~orig_nan).sum())
             if need <= 0:
                 break
-            length = min(int(rng.integers(fps, 10 * fps + 1)), need)
+            length = min(int(rng.integers(round(lo_s * fps), round(hi_s * fps) + 1)), need)
             start = int(rng.integers(0, T))
             drop[start:min(T, start + length)] = True
+        else:
+            raise RuntimeError(f"player_drop_frac {cfg['player_drop_frac']} not reached for "
+                               f"player {j} in {cfg['max_iter']} stretches")
         px[drop, j] = np.nan
         py[drop, j] = np.nan
 

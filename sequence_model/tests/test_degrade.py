@@ -48,3 +48,12 @@ def test_player_drop_fraction(synthetic_match):
     frac = np.isnan(d.px).mean(axis=0)
     assert np.all(np.abs(frac - DC["player_drop_frac"]) < 0.02)
     assert np.array_equal(np.isnan(d.px), np.isnan(d.py))
+
+
+def test_unreachable_targets_raise(synthetic_match):
+    import pytest
+    m = synthetic_match()
+    with pytest.raises(RuntimeError, match="live_seen_target"):
+        degrade(m, 0, {**DC, "max_iter": 1})
+    with pytest.raises(RuntimeError, match="player_drop_frac"):
+        degrade(m, 0, {**DC, "live_seen_target": 1.0, "dead_hide_p": 0.0, "max_iter": 1})
