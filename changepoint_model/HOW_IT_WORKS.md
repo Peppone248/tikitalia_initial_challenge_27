@@ -1,0 +1,280 @@
+# How the possession model works (v4.2)
+
+A guide for the team: what the model does, which pieces it is made of, how a frame becomes a
+label and why it was built this way. The technical detail and every number are in `REPORT.md` and
+`VERSIONS.md`; the commands are in `README.md`.
+
+---
+
+## 1. The job in one sentence
+
+For each of the 199,319 video frames of the match, write who has the ball, **H** (home), **A**
+(away) or **D** (dead ball), or **X** outside the two halves. Tracking is the only input, plus two
+signals from the provided files: the kick-off tag in Smart Tagging and the referee's whistle in
+the audio.
+
+The scorer (spellF1) does not count frames. It counts **possessions** (spells): a predicted
+spell matches a true one when the two overlap enough (IoU 0.3 to 0.7). Two consequences shape
+the whole design:
+
+- **A missed change costs two spells.** If the model misses a change of possession, the long spell
+  it writes matches neither of the two true spells it covers.
+- **A wrong change also costs.** A cut in the wrong place breaks a good spell into two bad ones.
+
+Our earlier models were good at saying *who* has the ball frame by frame, but they rarely cut
+the short possessions. The team's own analysis put most of the lost points there (REPORT_B §20).
+This model is built to find **the changes**, not only the state.
+
+---
+
+## 2. The pipeline at a glance
+
+```text
+ provided files                    per frame (25 per second)                    whole match
+ ──────────────                    ─────────────────────────                    ───────────
+
+ tracking (ATD) ─► [1] features ─┬─► [2a] GRU  ──────────► P(home | alive)  ─┐
+                    121 numbers  │                                          │
+                    per frame    ├─► [2b] trees ─────────► P(dead)          ├─► [3] HMM decoder ─► H/A/D
+                                 │                                          │     (Viterbi)
+                                 └─► [2c] trees ─────────► P(change)  ───────┤
+                                     (+ how P(home) moves) P(stop)          │  hazards: how cheap
+                                                           P(restart) ──────┘  a cut is at frame t
+                                                                                   │
+ Smart Tagging "Kick Off" ───────────────────────────────────────► [4] Law 8 ◄────┘
+                                                                     │  D before each kick-off
+ audio ─► whistle blasts ────────────────────────────────────────► [5] whistle ◄──┘
+                                                                     │  D from the blast if the
+                                                                     ▼  players slow down
+                                                              tikitalia.csv
+```
+
+Steps 1 to 3 are the **learned model**: trained on 18 external matches, never on the provided
+one. Steps 4 and 5 are **rules** taken from the Laws of the Game. Their constants were set a
+priori (metres and seconds) or by the team's earlier rule work, also on external data.
+
+---
+
+## 3. Layer by layer
+
+### [0] Input
+
+- Positions in metres, origin at the centre spot. A player or ball that is not tracked is left
+  empty (NaN) rather than guessed.
+- Each team's attack direction is **inferred** from where its deepest players stand in each half.
+  The same code therefore runs on any source (IDSSE, Metrica, PFF, the provided ATD).
+- The two halves come from `games.half_video_blocks()`: those are the graded frames, and
+  everything else is X.
+
+### [1] Features: 121 numbers per frame, split into two families
+
+The key trick is a symmetry. If you swap home and away (and their attack directions), the answer
+"who has the ball" must flip, but "is the ball dead" must not change.
+
+| family | count | behaviour under the swap | examples | used for |
+|---|---|---|---|---|
+| **odd** | 61 | the sign flips | control vote (closest player within 1.5 m of a ball slower than 8 m/s: +1 home, −1 away) now and averaged over 0.5 / 1 / 2 / 4 s, before and after the frame; pressure at 1 / 3 / 8 m; contacts (ball turns > 30° or changes speed by > 2 m/s); ball position in the attack frame; shape differences (width, length, lines, centroid, speed) | **who** has the ball |
+| **even** | 60 | unchanged | ball seen / seconds since or until it was seen, ball speed, ball out of play; how many players are tracked, how fast they move, share walking; duels; **flip features**: did the control vote change sign across this frame? | **dead ball** and **changes** |
+
+Because of the symmetry the model cannot learn "home has the ball more often", which would be a
+bias of the training matches. Every constant here is a football quantity (radii, speeds, seconds)
+chosen before seeing any data.
+
+The model is run on the whole recorded match, so a feature at frame t may look **into the future**
+too ("who controls the ball in the next 2 s"). That is legitimate, because the scorer also sees
+the whole file, and it is what makes a change easy to place: before it one team controls the
+ball, after it the other.
+
+### [2] The heads: six probabilities per frame
+
+| head | model | question it answers |
+|---|---|---|
+| P(home \| alive) | **bidirectional GRU** (recurrent network, 64 units, 2 layers) | if the ball is alive, how likely is it home's? |
+| P(dead) | **gradient-boosted trees** (scikit-learn, 200 trees) | is the ball out of play here? |
+| P(change) | boosted trees | is a home↔away change within ±0.5 s of this frame? |
+| P(stop) | boosted trees | does play stop within ±0.5 s? |
+| P(restart) | boosted trees | does play restart within ±0.5 s? |
+
+Why two kinds of model (the "hybrid", v4):
+
+- **The GRU reads a whole stretch of the match**, forwards and backwards, rather than a fixed set
+  of windows. It names the team better: 94 % team accuracy against 93 % for the trees.
+- **The trees date the boundaries better.** They receive the explicit windows plus how P(home)
+  moves around the frame ("stacking"): a change is where P(home) swings from one side to the other.
+- Each part does what it is best at. On 6 held-out matches the hybrid scored +0.016 spellF1 over
+  the trees alone, and won on 6 of the 6.
+
+The GRU is symmetric by construction: it is run on the frame and on its home/away mirror, and the
+two answers are averaged. It needs torch only to train; prediction runs in plain numpy, so the
+output does not depend on torch being installed.
+
+### [3] The decoder: turning probabilities into possessions
+
+A frame-by-frame argmax would flicker H-A-H-A. The decoder chooses the **single most likely
+sequence** of labels for the whole half (Viterbi algorithm over a hidden Markov model with three
+states, H, A and D). It balances two things:
+
+1. **Evidence (emission).** At each frame, how strongly the heads favour H, A or D.
+2. **The price of a cut (hazard).** Every time the label changes the sequence pays a cost, and
+   that cost is **different at every frame**: it is cheap where the boundary heads expect a
+   change and expensive everywhere else.
+
+That second point is what is new compared with the team's earlier HMMs, which had one fixed switch
+rate for the whole match. Raising a fixed rate adds cuts everywhere, the wrong ones included
+(REPORT_B §24). Here the cut becomes cheap only where the evidence for a boundary is.
+
+Hard constraints:
+
+- A possession lasts at least **20 frames (0.8 s)**.
+- A dead ball lasts at least **50 frames (2 s)**.
+- H→A and A→H go through the *change* hazard, H/A→D through *stop*, D→H/A through *restart*.
+
+### [4] Law 8: nothing happens before the kick-off
+
+In the provided match the second half is graded from frame 110,808, but the kick-off is only at
+113,742. In between, nearly 3,000 frames show players warming up with balls on the pitch. A
+tracking model sees "a player next to a ball" and invents possessions there.
+
+The rule: inside the Smart Tagging "Kick Off (Start)" window, find the kick. That is the first
+frame where the ball, at rest near the centre spot, moves more than 2 m within 1 s. Everything
+before it is D. If no kick is found, the start of the tag window is used, which is the cautious
+choice (fewer frames turned into D).
+
+On the external matches the periods start at the kick-off, so the rule changes nothing there.
+A version that guessed the kick-off from the tracking alone was dropped: it placed the kick-off
+2 to 9 minutes late in 3 of the 36 external halves.
+
+### [5] The whistle (rule R7a from the team's rules, constants unchanged)
+
+The referee's blasts are detected in the audio with a frequency profile taken from the literature
+(nothing measured on this audio). A blast while the model says "alive" starts a stoppage **only
+if the players then really slow down**: within 3 s, their mean speed drops to 70 % of what it was
+before, or below walking pace (1.1 m/s).
+
+The stoppage runs from the blast to the model's next stoppage if one starts within 15 s, otherwise
+to the next kick from rest within 30 s. This mirrors Law 5: play stops at the whistle, not when the
+tracking finally notices it. Blasts during a stoppage (the restart whistle) are ignored.
+
+---
+
+## 4. How a decision is made, frame by frame (with real numbers)
+
+The decoder adds up, along each candidate sequence, **evidence minus the cost of cuts**, and keeps
+the best one. With the settings of the model (gamma 8, w 0.25):
+
+**Evidence per frame.** For a frame with P(dead) = 0.05 and P(home | alive) = 0.9:
+
+```text
+evidence for H over A = 0.25 × ln(0.9 / 0.1) ≈ 0.55 per frame
+with P(home) = 0.7 instead:   0.25 × ln(0.7 / 0.3) ≈ 0.21 per frame
+```
+
+The weight w = 0.25 deliberately makes single frames weak. **No single frame decides**, only a
+consistent stretch does.
+
+**Cost of a cut** at frame t = −ln(hazard), where hazard = 8 × P(change) / 25:
+
+| P(change) at that frame | hazard | cost of cutting there | frames of clear evidence (0.55 each) needed to pay for it |
+|---|---|---|---|
+| 0.001 (nothing happening) | 0.0003 | 8.0 | ~15 (0.6 s) |
+| 0.02 | 0.006 | 5.1 | ~9 |
+| 0.2 | 0.064 | 2.8 | ~5 |
+| 0.8 (a change is very likely) | 0.26 | 1.4 | ~3 |
+
+**Example: a quick interception.** Home passes, away intercepts, and 1.2 s later home wins the
+ball back.
+
+- **What the trees see.** Around the interception the control vote flips sign and P(home) swings
+  across 0.5, so P(change) peaks near 0.8 at the interception and again at the recovery.
+- **The cuts.** Both cuts become cheap, about 1.4 each instead of 8.
+- **The evidence.** The 30 frames in between carry around 0.2 to 0.5 each in favour of A.
+- **The result.** The decoder writes H | A (1.2 s) | H.
+
+An old fixed-rate HMM would have had to pay about 8 twice for the same short spell, and would
+have kept H throughout. That one short spell is worth two matched possessions to the scorer.
+
+**Example: a pass that only looks like a change.** A long ball travels 2 s with nobody in
+control. The votes go quiet, but they do not flip, because the same team receives the ball.
+P(change) stays low, the cut stays expensive, and H is kept. This is the "a touch is not a
+change" rule that the labels are built on.
+
+**Example: a stoppage.** Ball out for a throw-in:
+
+- **Signals.** The ball leaves the lines, the players slow down and the ball is often lost by the
+  tracker.
+- **Heads.** P(dead) rises above 0.9 and P(stop) peaks at the exit.
+- **Evidence.** For D over H that is about 0.65 per frame, which buys a D spell of at least 2 s.
+- **End.** The spell ends where P(restart) peaks: the ball moves again and the players speed up.
+
+---
+
+## 5. How it was trained
+
+| | |
+|---|---|
+| **Data** | 18 external matches with event labels: 3 Metrica sample games, 7 IDSSE (DFL), 8 PFF World Cup games. The provided match is never used to train or choose anything. |
+| **Labels** | built from each match's events by one rule taken from CHALLENGE.md: dead from the ball leaving play, the whistle or the goal until the restart kick; team = the team of the last on-ball event; a lost ball stays with the loser until the opponent's recovery or pass. |
+| **Realistic damage** | Metrica and IDSSE tracking is "too clean" compared with the provided ATD, so it is degraded a priori: 80 % of stoppages lose the ball, live-ball gaps of 1 to 30 s until only 80 % of live frames are seen, 7 % of player frames removed. PFF already comes from a real broadcast tracker and is used as given. |
+| **Fitting** | trees: 200 rounds, 31 leaves, at least 200 frames per leaf, seed 2027. GRU: windows of 60 s, swap augmentation, fixed seed. The decoder's gamma and w were picked on the training matches, and gamma 8, w 0.25 came out every time. |
+| **Evaluation** | leave one match out: train on 17, score the 18th with the official scorer, repeat. |
+| **Public window** | the 5 labelled minutes of the provided match were scored **once**, after the choice was made, as a check only. |
+
+---
+
+## 6. How good it is
+
+| | spellF1 | note |
+|---|---|---|
+| Official baseline (smooth 50) on the public window | 0.326 | |
+| **v4.2 on the public window** | **0.691** | 2.1× the baseline; noise on 17 possessions is about ±0.17 |
+| Best earlier team model on the public window | 0.696 | level: the difference is far inside the noise |
+| v2 (trees only), leave-one-out, PFF (real tracker) | 0.583 | team HMM on the same files: 0.501 |
+| v2, leave-one-out, Metrica / IDSSE | 0.733 / 0.657 | |
+| v4 hybrid vs v2, 6 held-out matches | 0.653 vs 0.637 | wins 6/6 |
+
+On the public window, against the best earlier model, v4.2:
+
+- finds 3 possessions that the earlier model misses, and misses none that it finds;
+- has a dead-ball recall of 0.73 (whistle included) and a change-timing F1 of 0.60;
+- has a latency close to zero.
+
+---
+
+## 7. Strengths and weaknesses
+
+**Strong at**
+
+- **Cutting changes.** Short possessions get split from long ones when the boundary heads see a
+  swing, which is where the earlier models lost the most.
+- **Robustness.** It is trained on damaged tracking and on a real broadcast tracker, and every
+  constant is a football quantity. Nothing is tuned to the provided match.
+- **Symmetry.** No home or away bias is possible, by construction.
+- **Reproducibility.** It is deterministic: the same file, byte for byte, on every run (see
+  `scripts/check_determinism.py`).
+
+**Weak at**
+
+- **Very short possessions.** Spells under 2 s are still found only about half the time: the
+  0.8 s minimum and the cost of two cuts hold them back.
+- **Stoppages the tracker hides.** When the camera cuts away, the ball and players vanish. The
+  model has to guess from the seconds before and after, so some stoppages start late and end
+  early. The whistle fixes part of this, not all.
+- **Changes that look like passes.** Some interceptions, and loose balls between opponents, move
+  P(home) only a little, so the cut stays expensive.
+- **The 0.8 s minimum.** It rules out flicker, and also the very shortest true possessions.
+
+---
+
+## 8. Where things are
+
+| file | what |
+|---|---|
+| `cpm/features.py` | the 121 features |
+| `cpm/models.py`, `cpm/seq.py` | the trees and the GRU |
+| `cpm/pipeline.py` | prepare → predict → decode |
+| `cpm/decode.py` | the HMM with time-varying hazards (Viterbi) |
+| `cpm/kickoff.py` | Law 8 |
+| `cpm/rule_layers.py` | bridge to the team's whistle rule R7a (`HMM_first_imp/hmm_v0/dead_b.py`) |
+| `scripts/predict_atd.py` | the command that writes the submission |
+| `scripts/check_determinism.py` | same output on every machine? |
+| `models/cpm_v4_hybrid.pkl` | the trained model (GRU + trees) |
