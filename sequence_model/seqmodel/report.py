@@ -1,4 +1,5 @@
-"""Comparison table of the LOMO runs and the keep/drop criterion for the TCN."""
+"""Comparison table of the LOMO runs and the keep/drop criterion for the TCN. Frame and tcn select
+w, and tcn_change (beta, w), in-sample on the training matches of each fold."""
 import numpy as np
 
 COLS = ["spellF1", "macroF1", "n_pred_poss", "n_true_poss", "transF1_25"]
@@ -55,8 +56,8 @@ def render(df, ref="frame", cand="tcn_change"):
             if name == cand:
                 n_seeds = len(deltas)
                 verdict = criterion({s: list(d.values) for s, d in deltas.items()})
-    L += ["Note: for tcn_change the (beta, w) selection uses the 6 training matches of each fold "
-          "predicted by the network trained on them (in-sample, no inner retraining, to bound CPU "
+    L += ["Note: for frame and tcn the w selection, and for tcn_change the (beta, w) selection, "
+          "use the 6 training matches of each fold predicted by the network trained on them (in-sample, no inner retraining, to bound CPU "
           "time); the held-out match is never used.", ""]
     if verdict is not None and n_seeds < MIN_SEEDS:
         L.append(f"criterion: needs at least {MIN_SEEDS} seeds")

@@ -1,8 +1,10 @@
 """Per-frame probabilities and decoded labels for one match.
-Usage: python sequence_model/scripts/predict.py --weights W.npz --match M(.npz IDSSE | .xml ATD) --out DIR
+Usage (repo root): sequence_model/.venv/Scripts/python.exe sequence_model/scripts/predict.py --weights W.npz --match M(.npz IDSSE | .xml ATD) --out DIR
 Writes DIR/probs.npz (p_h, p_a, p_d, p_change, float32, one row per video frame) and DIR/labels.csv
-(frame,label; H/A/D on the graded frames, X elsewhere)."""
+(frame,label; H/A/D on the graded frames, X elsewhere).
+Decoding settings (trans, prior, beta, w) come from W_decode.json next to the weights when present."""
 import argparse
+import json
 import os
 import sys
 
@@ -42,15 +44,28 @@ def run(weights, match_path, out, beta=0.0, w=1.0, trans=None, prior=None):
     return lab
 
 
+def load_sidecar(weights):
+    """Decoding settings next to the weights (W.npz -> W_decode.json), or None with a warning."""
+    path = os.path.splitext(weights)[0] + "_decode.json"
+    if not os.path.exists(path):
+        print(f"WARNING: {path} not found: decoding uses the defaults (default transitions, beta 0, "
+              f"w 1), which differ from the measured configuration", file=sys.stderr)
+        return None
+    with open(path) as f:
+        return json.load(f)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--weights", required=True)
     ap.add_argument("--match", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--beta", type=float, default=0.0)
-    ap.add_argument("--w", type=float, default=1.0)
+    ap.add_argument("--beta", type=float, default=None, help="default: sidecar value, else 0")
+    ap.add_argument("--w", type=float, default=None, help="default: sidecar value, else 1")
     a = ap.parse_args()
-    run(a.weights, a.match, a.out, a.beta, a.w)
+    side = load_sidecar(a.weights) or {}
+    run(a.weights, a.match, a.out, a.beta if a.beta is not None else side.get("beta", 0.0),
+        a.w if a.w is not None else side.get("w", 1.0), side.get("trans"), side.get("prior"))
 
 
 if __name__ == "__main__":

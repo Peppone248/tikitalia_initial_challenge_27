@@ -101,3 +101,8 @@ ball_detection/**/*.cache
 sequence_model/.venv/
 sequence_model/data/
 sequence_model/runs/
+
+# the shipped TCN weights and their decode sidecar are small and versioned on purpose
+!sequence_model/weights/
+!sequence_model/weights/*.npz
+!sequence_model/weights/*.json
