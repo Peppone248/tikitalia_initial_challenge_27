@@ -1,0 +1,8 @@
+numpy>=1.26
+scipy>=1.11
+scikit-learn>=1.7,<2   # 1.7.2 and 1.9.1 give identical predictions (checked)
+numba>=0.59
+pyyaml>=6     # HMM_first_imp rule layers and kick-off/whistle configs
+pytest
+# only to train the GRU heads (prediction runs in numpy):
+# torch>=2.2  (CPU build is enough)

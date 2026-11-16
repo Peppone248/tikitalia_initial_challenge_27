@@ -1,0 +1,20 @@
+{
+ "machine": "vm",
+ "env": {
+  "python": "3.13.18",
+  "platform": "Linux-6.18.44-fc-v470-x86_64-with-glibc2.39",
+  "machine": "x86_64",
+  "processor": "x86_64",
+  "numpy": "2.5.3",
+  "sklearn": "1.9.1",
+  "numba": "0.68.1",
+  "yaml": "6.0.3",
+  "scipy": "1.18.1",
+  "blas": "scipy-openblas",
+  "ffmpeg": "ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers"
+ },
+ "time": "2026-11-16 11:53:34",
+ "sha256": {
+  "metrica_g3": "e15b07f49ba0c058abd216b5d1f4871c811769e06d8d5c82a66ac14431bc2a45"
+ }
+}

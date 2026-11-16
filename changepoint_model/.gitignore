@@ -1,0 +1,7 @@
+outputs/
+models/cache/
+__pycache__/
+*.pyc
+# debug helpers, kept local and out of the repository
+scripts/dead_review_list.py
+scripts/dead_review_summary.py
