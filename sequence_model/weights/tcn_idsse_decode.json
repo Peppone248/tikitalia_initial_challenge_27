@@ -20,8 +20,8 @@
   "J03WQQ",
   "J03WR9"
  ],
- "git_commit": "85503dc50e49a4c34cd5a2019b48f181e71870dc",
- "config_hash": "35ca4be2ea161e273bfcbcaee9944f50e76ddfce2f389d8ba37bc14c52155e56",
+ "git_commit": "fab8b43f9a23139e4f2ef639f95bcc522103b3aa",
+ "config_hash": "f15ca8d5fee12ac8da74df158674c1f178cdb3af13945622a4199831d95125aa",
  "config": {
   "tcn": {
    "channels": 32,
@@ -52,8 +52,42 @@
     1,
     10
    ],
-   "max_iter": 100000
+   "max_iter": 100000,
+   "keeper_hide_p": 0.8,
+   "keeper_hold_z": 0.5,
+   "keeper_hold_r": 1.0,
+   "keeper_hold_s": 1.0
+  },
+  "features": {
+   "smooth_frames": 5,
+   "unseen_cap_s": 60,
+   "slow_speed": 1.1,
+   "out_margin": 0.5,
+   "near_radii": [
+    3,
+    8
+   ],
+   "neutral_nearest": 50,
+   "shape_quantiles": [
+    0.1,
+    0.9
+   ],
+   "max_player_speed": 12,
+   "max_ball_speed": 40,
+   "keeper_ball": true,
+   "keeper_r": 3.0
+  },
+  "keeper": {
+   "box_depth": 16.5,
+   "box_half_width": 20.16
+  },
+  "clean": {
+   "enabled": true,
+   "jump_m": 2.5,
+   "min_box_s": 0.5,
+   "frozen_s": 2.0,
+   "min_keeper_share": 0.5
   }
  },
- "date": "2026-11-15"
+ "date": "2026-11-17"
 }

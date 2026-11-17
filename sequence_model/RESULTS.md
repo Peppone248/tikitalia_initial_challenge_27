@@ -1,4 +1,180 @@
-# Results (leave-one-match-out on the 7 IDSSE matches, seeds 2027 and 2028)
+# Results
+
+## Current shipped model (kick-off rule + goalkeeper fix, 19 features) — 17/11/2026
+
+Full leave-one-match-out table on the 7 IDSSE matches, seeds 2027 and 2028, code at commit fab8b43
+(weights in `weights/tcn_idsse.npz`, trained with seed 2027 on all 7 matches).
+
+- **Criterion: SODDISFATTO** (satisfied). tcn vs frame: +0.117 (seed 2027) and +0.089 (seed 2028),
+  better on 7/7 matches in both seeds; tcn_change vs frame: +0.117 / +0.093, 7/7.
+- Against the model before the two fixes (tcn 0.555 / 0.552): now 0.567 / 0.543, i.e. +0.012 and
+  -0.009 — opposite signs, mean 0.555 vs 0.554: no systematic change. The degradation now also hides
+  the ball in the keeper's hands, so the two tables are not exactly paired.
+- The kick-off rule never fires on IDSSE (halves start at the kick-off), so this table measures the
+  goalkeeper fix only; see "Kick-off rule" below for its evidence on the provided match.
+- Absolute numbers are optimistic (the degradation hides the ball on true dead-ball runs and on true
+  keeper holds); only relative comparisons count.
+
+## Per model and seed (mean over matches)
+
+| model | seed | spellF1 | macroF1 | n_pred_poss | n_true_poss | transF1_25 |
+|---|---|---|---|---|---|---|
+| baseline50 | 2027 | 0.244 | 0.578 | 354.1 | 387.9 | 0.300 |
+| baseline50 | 2028 | 0.246 | 0.589 | 348.3 | 387.9 | 0.281 |
+| frame | 2027 | 0.450 | 0.835 | 258.3 | 387.9 | 0.439 |
+| frame | 2028 | 0.454 | 0.833 | 263.3 | 387.9 | 0.429 |
+| tcn | 2027 | 0.567 | 0.870 | 297.0 | 387.9 | 0.535 |
+| tcn_change | 2027 | 0.568 | 0.871 | 313.6 | 387.9 | 0.540 |
+| tcn | 2028 | 0.543 | 0.862 | 301.3 | 387.9 | 0.506 |
+| tcn_change | 2028 | 0.546 | 0.864 | 308.7 | 387.9 | 0.516 |
+
+## Chosen (beta, w) per fold
+
+| model | seed | match | beta | w |
+|---|---|---|---|---|
+| frame | 2027 | J03WMX | 0 | 0.5 |
+| frame | 2027 | J03WN1 | 0 | 0.5 |
+| frame | 2027 | J03WOH | 0 | 0.5 |
+| frame | 2027 | J03WOY | 0 | 0.5 |
+| frame | 2027 | J03WPY | 0 | 0.5 |
+| frame | 2027 | J03WQQ | 0 | 0.5 |
+| frame | 2027 | J03WR9 | 0 | 0.5 |
+| frame | 2028 | J03WMX | 0 | 0.5 |
+| frame | 2028 | J03WN1 | 0 | 0.5 |
+| frame | 2028 | J03WOH | 0 | 0.5 |
+| frame | 2028 | J03WOY | 0 | 0.5 |
+| frame | 2028 | J03WPY | 0 | 0.5 |
+| frame | 2028 | J03WQQ | 0 | 0.5 |
+| frame | 2028 | J03WR9 | 0 | 0.5 |
+| tcn | 2027 | J03WMX | 0 | 1 |
+| tcn | 2027 | J03WN1 | 0 | 1 |
+| tcn | 2027 | J03WOH | 0 | 1 |
+| tcn | 2027 | J03WOY | 0 | 0.5 |
+| tcn | 2027 | J03WPY | 0 | 1 |
+| tcn | 2027 | J03WQQ | 0 | 1 |
+| tcn | 2027 | J03WR9 | 0 | 1 |
+| tcn_change | 2027 | J03WMX | 20 | 0.5 |
+| tcn_change | 2027 | J03WN1 | 20 | 0.5 |
+| tcn_change | 2027 | J03WOH | 0 | 1 |
+| tcn_change | 2027 | J03WOY | 20 | 0.5 |
+| tcn_change | 2027 | J03WPY | 20 | 0.5 |
+| tcn_change | 2027 | J03WQQ | 20 | 0.5 |
+| tcn_change | 2027 | J03WR9 | 20 | 0.5 |
+| tcn | 2028 | J03WMX | 0 | 1 |
+| tcn | 2028 | J03WN1 | 0 | 1 |
+| tcn | 2028 | J03WOH | 0 | 1 |
+| tcn | 2028 | J03WOY | 0 | 1 |
+| tcn | 2028 | J03WPY | 0 | 1 |
+| tcn | 2028 | J03WQQ | 0 | 1 |
+| tcn | 2028 | J03WR9 | 0 | 1 |
+| tcn_change | 2028 | J03WMX | 5 | 0.5 |
+| tcn_change | 2028 | J03WN1 | 20 | 0.5 |
+| tcn_change | 2028 | J03WOH | 20 | 0.5 |
+| tcn_change | 2028 | J03WOY | 20 | 0.5 |
+| tcn_change | 2028 | J03WPY | 20 | 0.5 |
+| tcn_change | 2028 | J03WQQ | 20 | 0.5 |
+| tcn_change | 2028 | J03WR9 | 20 | 0.5 |
+
+## Paired spellF1 delta vs frame (per match)
+
+### baseline50, seed 2027
+
+| match | delta |
+|---|---|
+| J03WMX | -0.141 |
+| J03WN1 | -0.149 |
+| J03WOH | -0.246 |
+| J03WOY | -0.244 |
+| J03WPY | -0.273 |
+| J03WQQ | -0.192 |
+| J03WR9 | -0.196 |
+| **mean** | -0.206 |
+
+better 0/7, worse 7/7
+
+### baseline50, seed 2028
+
+| match | delta |
+|---|---|
+| J03WMX | -0.188 |
+| J03WN1 | -0.146 |
+| J03WOH | -0.210 |
+| J03WOY | -0.215 |
+| J03WPY | -0.231 |
+| J03WQQ | -0.237 |
+| J03WR9 | -0.227 |
+| **mean** | -0.208 |
+
+better 0/7, worse 7/7
+
+### tcn, seed 2027
+
+| match | delta |
+|---|---|
+| J03WMX | +0.150 |
+| J03WN1 | +0.125 |
+| J03WOH | +0.078 |
+| J03WOY | +0.084 |
+| J03WPY | +0.088 |
+| J03WQQ | +0.137 |
+| J03WR9 | +0.154 |
+| **mean** | +0.117 |
+
+better 7/7, worse 0/7
+
+### tcn, seed 2028
+
+| match | delta |
+|---|---|
+| J03WMX | +0.085 |
+| J03WN1 | +0.099 |
+| J03WOH | +0.083 |
+| J03WOY | +0.105 |
+| J03WPY | +0.048 |
+| J03WQQ | +0.089 |
+| J03WR9 | +0.115 |
+| **mean** | +0.089 |
+
+better 7/7, worse 0/7
+
+### tcn_change, seed 2027
+
+| match | delta |
+|---|---|
+| J03WMX | +0.142 |
+| J03WN1 | +0.130 |
+| J03WOH | +0.078 |
+| J03WOY | +0.114 |
+| J03WPY | +0.070 |
+| J03WQQ | +0.135 |
+| J03WR9 | +0.154 |
+| **mean** | +0.117 |
+
+better 7/7, worse 0/7
+
+### tcn_change, seed 2028
+
+| match | delta |
+|---|---|
+| J03WMX | +0.086 |
+| J03WN1 | +0.100 |
+| J03WOH | +0.075 |
+| J03WOY | +0.111 |
+| J03WPY | +0.061 |
+| J03WQQ | +0.089 |
+| J03WR9 | +0.129 |
+| **mean** | +0.093 |
+
+better 7/7, worse 0/7
+
+Note: for frame and tcn the w selection, and for tcn_change the (beta, w) selection, use the 6 training matches of each fold predicted by the network trained on them (in-sample, no inner retraining, to bound CPU time); the held-out match is never used.
+
+criterion: SODDISFATTO
+
+---
+
+## Previous model (before the kick-off and goalkeeper fixes)
+
 
 - Criterion: SODDISFATTO. The plain TCN gains +0.103 spellF1 over the frame baseline, better on 7/7 matches in both seeds.
 - The change head adds nothing: tcn_change is about equal to tcn (+0.101 / +0.103), so p_change is kept in probs.npz but unused.
