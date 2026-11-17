@@ -14,6 +14,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from seqmodel.decode import decode  # noqa: E402
+from seqmodel.kickoff import apply_kickoff, detect_kickoff  # noqa: E402
 from seqmodel.infer import NumpyTCN  # noqa: E402
 from seqmodel.match import CFG, load_atd, load_idsse  # noqa: E402
 
@@ -33,6 +34,10 @@ def run(weights, match_path, out, beta=0.0, w=1.0, trans=None, prior=None):
     m = load_match(match_path)
     p3, pc = NumpyTCN.load(weights).predict_match(m)
     lab = decode(p3, pc, m.period, w, beta, trans, prior).copy()
+    if CFG["kickoff"]["enabled"]:
+        for per in m.graded_periods:
+            print(f"kick-off period {per}: row {detect_kickoff(m, per)}", file=sys.stderr)
+        lab = apply_kickoff(lab, m, m.graded_periods)
     lab[~np.isin(m.period, m.graded_periods)] = CFG["labels"]["X"]
     os.makedirs(out, exist_ok=True)
     np.savez(os.path.join(out, "probs.npz"), p_h=p3[:, 0].astype(np.float32),

@@ -148,3 +148,24 @@ def test_predict_uses_match_graded_periods(synthetic_match, weights, tmp_path, m
     mod.run(weights, str(src), str(tmp_path / "o"))
     labs = np.array(_check(tmp_path / "o", 900))
     assert (labs[m.period == 1] == "X").all() and "X" not in labs[m.period == 2]
+
+
+def _kick_match():
+    from test_kickoff import build
+    return build((400, 250))
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_predict_applies_kickoff(weights, tmp_path, monkeypatch, enabled):
+    m = _kick_match()
+    mod = _load_script()
+    monkeypatch.setattr(mod, "load_idsse", lambda p: m)
+    monkeypatch.setitem(CFG["kickoff"], "enabled", enabled)
+    src = tmp_path / "m.npz"
+    src.write_bytes(b"")
+    mod.run(weights, str(src), str(tmp_path / "o"))
+    labs = np.array(_check(tmp_path / "o", 1600))
+    if enabled:
+        assert (labs[:400 - 3] == "D").all() and (labs[800:1050 - 3] == "D").all()
+    else:
+        assert not (labs[800:1000] == "D").all()
