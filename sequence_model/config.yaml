@@ -1,0 +1,86 @@
+# Every constant of the module, with its reason.
+fps: 25                  # frame rate of the project and of IDSSE
+min_run_frames: 25       # 1 s: a team run shorter than this between two runs of the other team is a flip artefact
+default_length: 105.0    # m, used when the source reports no pitch size (pitch_x == 0)
+default_width: 68.0      # m, same reason
+labels: {H: 0, A: 1, D: 2, X: 3}   # same codes as evaluation/possession_metrics.label_codes
+degrade:                 # makes clean external tracking look like the provided match's automatic tracking
+  dead_hide_p: 0.8       # probability that a whole dead-ball run loses the ball: in the provided match the ball is mostly missing when play is stopped
+  live_gap_s: [1, 3, 8, 20]   # a-priori quantiles (s) of the ball-gap length in live play; gaps are drawn by piecewise-linear inverse CDF between them
+  live_seen_target: 0.6  # share of live frames with the ball seen: the provided match misses the ball ~41% of all frames, mostly in dead ball
+  player_drop_frac: 0.07 # share of each player's frames lost to broken tracks (short stretches of 1-10 s)
+  player_drop_s: [1, 10] # s, min and max length of a lost-track stretch: automatic tracking loses a player for a few seconds at a time
+  max_iter: 100000       # safety cap on gap/stretch draws; hitting it means a target is unreachable and raises
+  keeper_hide_p: 0.8     # probability that a keeper hold (ball in the keeper's hands, detected on the CLEAN data) loses the ball: the provided tracker usually loses it in the keeper's hands (REPORT_B 12.1); a priori, same value as dead_hide_p. 0 restores the previous degradation exactly
+  keeper_hold_z: 0.5     # m, ball height above which it is in the hands, not at the feet (a ball on the ground is ~0.1 m); same as REPORT_B 12.3
+  keeper_hold_r: 1.0     # m, ball within this of the keeper: held, not merely near (REPORT_B 12.3)
+  keeper_hold_s: 1.0     # s, minimum hold: shorter is a header, a punch or a deflection, not a catch (REPORT_B 12.3)
+keeper:                  # goalkeeper proxy shared by degrade, features and clean: no roles in the data, so the keeper is a team's deepest player (in its own attacking frame) inside its own penalty area
+  box_depth: 16.5        # m, penalty area depth from the goal line (Laws of the Game)
+  box_half_width: 20.16  # m, half of the 40.32 m penalty area width (Laws of the Game)
+clean:                   # tracking cleaning (clean.py): obvious tracker errors fixed by a general rule (REPORT_B 10.2, keeper identity)
+  enabled: true          # False leaves the tracking untouched
+  jump_m: 2.5            # m between two consecutive frames: 62 m/s, another person; a track stretch ends here or at a gap (REPORT_B 10.2)
+  min_box_s: 0.5         # s inside the opponent's penalty area before a stretch can be moved: box-edge jitter (REPORT_B 10.2)
+  frozen_s: 2.0          # s of identical coordinates inside a moved stretch: a frozen ghost, dropped instead of moved (REPORT_B 10.2)
+  min_keeper_share: 0.5  # the keeper slot of a team is the column most often its deepest player in the period; it must be the deepest on at least half of its own tracked frames, otherwise no slot is trusted and nothing is moved (conservative: no position_type in our data)
+atd:                     # plausibility of the provided automatic tracking after conversion (match.match_from_atd)
+  min_mean_tracked: 10   # mean tracked player slots per graded frame: the provided match averages ~20.5, so below 10 the conversion dropped coordinates (e.g. slots not matched)
+  min_tracked_share: 0.9 # share of graded frames with at least one tracked player: play is tracked almost everywhere in the halves
+features:
+  smooth_frames: 5       # centred moving average on positions before differencing: tracking jitter would otherwise dominate speeds
+  unseen_cap_s: 60       # s, the ball-absence counter saturates: beyond a minute the exact length carries no more information
+  slow_speed: 1.1        # m/s, mean speed of all players below which everybody is walking (dead-ball signature in the team reports)
+  out_margin: 0.5        # m, a-priori tolerance outside the touch/goal lines before the ball counts as out
+  near_radii: [3, 8]     # m, pressure radii around the ball (a-priori: playing distance and zone of influence)
+  neutral_nearest: 50    # m, nearest-player distance when a team has no tracked player (far away, no pressure)
+  shape_quantiles: [0.1, 0.9]   # robust extent of a team (width, length) ignoring outliers such as the keeper
+  max_player_speed: 12   # m/s, human sprint limit (same as V_PLAYER_MAX of the team's model); faster is a tracking glitch and counts as unknown
+  max_ball_speed: 40     # m/s, physical limit of a kicked ball (same as the ball detector's); faster is a glitch and gives the neutral speed 0
+  keeper_ball: true      # the keeper_ball feature (H - A of "the keeper has the last-seen ball"); False restores the previous feature set exactly (and the shipped weights' input size)
+  keeper_r: 3.0          # m, last-seen ball within this of the keeper (deepest player inside his own box) counts as his: a priori, the playing distance (near_radii[0]); wider than keeper_hold_r because the last-seen ball is where the tracker lost it, not where he holds it now
+decode:                  # 3-state HMM decoder (decode.py)
+  min_frames: {H: 20, A: 20, D: 50}   # 0.8 s / 0.8 s / 2 s: shortest plausible possession and stoppage; enforced by chains of that many sub-states
+  change_every_s: 20     # a priori: a possession change H<->A every 20 s of possession (default transition rate)
+  stop_every_s: 30       # a priori: a stoppage every 30 s of play (H->D, A->D default rate)
+  stop_extra_s: 12       # a priori: a stoppage lasts on average 12 s beyond its minimum (D->H, D->A share this, half each)
+  eps: 1.0e-6            # added to probabilities before the log: exact 0 must not give -inf
+  max_exit: 0.5          # cap on the total per-frame exit probability of a state: keeps self-loops in (0,1) even with degenerate rates (e.g. count_transitions with no exposure gives 1); each of the two exits is capped at half
+  prior_floor: 1.0e-4    # lower bound of the class prior in the emission: a class absent from the training matches would give log(0) = -inf; 1e-4 caps its boost at ~9 nats
+  rate_floor: 1.0e-12    # lower bound of every transition rate: log(0) must not occur
+frame_model:             # per-frame logistic regression (frame_model.py)
+  l2: 1.0                # ridge penalty on the weights (not the intercepts), on the summed log-loss: mild shrinkage, a-priori value
+  step: 3                # every 3rd frame of each training match: neighbouring frames are near-duplicates, 3x faster fit
+  max_iter: 50           # Newton iterations cap: the problem is convex and converges in far fewer
+  tol: 1.0e-8            # Newton stops when the largest parameter step is below this
+baseline50:              # reference predictor (evaluate.py)
+  half_window: 50        # frames each side of the majority vote (+-2 s at 25 fps): the reference smoothing
+tcn:                     # bidirectional temporal convolutional network (tcn.py)
+  channels: 32           # width of every layer: small, the training set is only a few matches
+  levels: 6              # dilations 1..32 with kernel 5: receptive field +-126 frames (+-5 s) around each frame
+  kernel: 5              # odd, so "same" padding is symmetric (non-causal: looks backward and forward)
+  window: 1500           # frames (60 s) per training window, always inside a single period
+  batch: 8               # windows per gradient step
+  lr: 1.0e-3             # Adam learning rate
+  windows_per_epoch: 200 # one "epoch" = 200 random windows (25 steps): a fixed budget, independent of match length
+  max_epochs: 15         # hard cap on training length
+  patience: 3            # epochs without improvement of the held-out loss before stopping
+  change_k: 12           # frames: the change head fires within +-12 frames (0.5 s) of a direct H<->A change
+  change_weight: 0.5     # weight of the change-head BCE relative to the H/A/D cross-entropy
+  swap_p: 0.5            # probability of the team-swap augmentation on each batch
+  threads: 4             # torch CPU threads
+kickoff:                 # kick-off detection from the players (Law 8) and "D before the kick-off" rule (kickoff.py)
+  enabled: true          # False restores the decoder output untouched
+  circle_radius: 9.15    # m, centre circle: opponents stay outside it until the kick (Laws of the Game)
+  circle_tol: 1.0        # m, tolerance on the circle for tracking error
+  line_tol: 1.0          # m, players within this of the halfway line count for neither side
+  min_players: 7         # tracked players per team needed to trust the "own half" check
+  max_wrong_side: 1      # players per team on the wrong side: one exception for tracking noise or duplicates
+  max_intruders: 2       # tolerance chosen after observing that the provided second-half kick-off was missed with 1 (two players of one team inside the circle during the set-up); not derived from the Laws; no labels used. Ablation on the provided match: 1 -> period 1 detected, period 2 None; 2 -> both detected
+  kicker_r: 2.0          # m, the kicker stands at the ball on the centre spot (~1-2 m plus tracking error)
+  setup_s: 2.0           # s, the set-up lasts seconds; shorter matches of the pattern are transient
+  centre_r: 1.5          # m, ball seen this close to the spot is recorded as supporting evidence only
+  lookback_s: 30         # s, rows before the period start also scanned, so a formation straddling it is whole
+  max_after_start_s: 300  # s, a half's kick-off comes within minutes of its graded start; a later "formation" can be a restart after a goal or a long stoppage, and masking up to it would turn real play into D
+  run_speed: 2.0         # m/s, mean speed of the tracked players above which they are running. Heuristic, set between two observed cases (an external IDSSE goal restart, live share 0.45; the provided second half, 0.05), not a priori
+  max_live_share: 0.2    # share of frames between the period start and the formation with running players above which the formation is taken for a goal restart. Heuristic, set between the same two observed cases (0.45 vs 0.05), not a priori

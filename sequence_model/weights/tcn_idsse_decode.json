@@ -1,0 +1,93 @@
+{
+ "trans": {
+  "HA": 0.003700967801205158,
+  "HD": 0.0014286410661187084,
+  "AH": 0.004375917012020902,
+  "AD": 0.0014200279715479592,
+  "DH": 0.0008235541311745428,
+  "DA": 0.0008694413115039161
+ },
+ "prior": null,
+ "beta": 0,
+ "w": 1.0,
+ "seed": 2027,
+ "matches": [
+  "J03WMX",
+  "J03WN1",
+  "J03WOH",
+  "J03WOY",
+  "J03WPY",
+  "J03WQQ",
+  "J03WR9"
+ ],
+ "git_commit": "fab8b43f9a23139e4f2ef639f95bcc522103b3aa",
+ "config_hash": "f15ca8d5fee12ac8da74df158674c1f178cdb3af13945622a4199831d95125aa",
+ "config": {
+  "tcn": {
+   "channels": 32,
+   "levels": 6,
+   "kernel": 5,
+   "window": 1500,
+   "batch": 8,
+   "lr": 0.001,
+   "windows_per_epoch": 200,
+   "max_epochs": 15,
+   "patience": 3,
+   "change_k": 12,
+   "change_weight": 0.5,
+   "swap_p": 0.5,
+   "threads": 4
+  },
+  "degrade": {
+   "dead_hide_p": 0.8,
+   "live_gap_s": [
+    1,
+    3,
+    8,
+    20
+   ],
+   "live_seen_target": 0.6,
+   "player_drop_frac": 0.07,
+   "player_drop_s": [
+    1,
+    10
+   ],
+   "max_iter": 100000,
+   "keeper_hide_p": 0.8,
+   "keeper_hold_z": 0.5,
+   "keeper_hold_r": 1.0,
+   "keeper_hold_s": 1.0
+  },
+  "features": {
+   "smooth_frames": 5,
+   "unseen_cap_s": 60,
+   "slow_speed": 1.1,
+   "out_margin": 0.5,
+   "near_radii": [
+    3,
+    8
+   ],
+   "neutral_nearest": 50,
+   "shape_quantiles": [
+    0.1,
+    0.9
+   ],
+   "max_player_speed": 12,
+   "max_ball_speed": 40,
+   "keeper_ball": true,
+   "keeper_r": 3.0
+  },
+  "keeper": {
+   "box_depth": 16.5,
+   "box_half_width": 20.16
+  },
+  "clean": {
+   "enabled": true,
+   "jump_m": 2.5,
+   "min_box_s": 0.5,
+   "frozen_s": 2.0,
+   "min_keeper_share": 0.5
+  }
+ },
+ "date": "2026-11-17"
+}
