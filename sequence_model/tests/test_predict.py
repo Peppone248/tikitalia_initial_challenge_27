@@ -156,16 +156,21 @@ def _kick_match():
 
 
 @pytest.mark.parametrize("enabled", [True, False])
-def test_predict_applies_kickoff(weights, tmp_path, monkeypatch, enabled):
+def test_predict_applies_kickoff(weights, tmp_path, monkeypatch, enabled, capsys):
     m = _kick_match()
     mod = _load_script()
     monkeypatch.setattr(mod, "load_idsse", lambda p: m)
+    # the decoder says H everywhere: only the kick-off rule can put D before the kick-off
+    monkeypatch.setattr(mod, "decode", lambda *a, **k: np.zeros(len(m.period), dtype=np.int8))
     monkeypatch.setitem(CFG["kickoff"], "enabled", enabled)
     src = tmp_path / "m.npz"
     src.write_bytes(b"")
     mod.run(weights, str(src), str(tmp_path / "o"))
     labs = np.array(_check(tmp_path / "o", 1600))
+    err = capsys.readouterr().err
     if enabled:
         assert (labs[:400 - 3] == "D").all() and (labs[800:1050 - 3] == "D").all()
+        assert (labs[400 + 3:800] == "H").all() and (labs[1050 + 3:] == "H").all()
+        assert err.count("kick-off period") == 2
     else:
-        assert not (labs[800:1000] == "D").all()
+        assert (labs == "H").all() and "kick-off period" not in err

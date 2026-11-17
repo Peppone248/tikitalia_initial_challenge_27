@@ -61,11 +61,11 @@ kickoff:                 # kick-off detection from the players (Law 8) and "D be
   line_tol: 1.0          # m, players within this of the halfway line count for neither side
   min_players: 7         # tracked players per team needed to trust the "own half" check
   max_wrong_side: 1      # players per team on the wrong side: one exception for tracking noise or duplicates
-  max_intruders: 2       # players of ONE team strictly inside the circle: referee + a tracker duplicate assigned to a team (the provided tracker has more slots than players); 1 rejected the provided second-half kick-off
+  max_intruders: 2       # tolerance chosen after observing that the provided second-half kick-off was missed with 1 (two players of one team inside the circle during the set-up); not derived from the Laws; no labels used. Ablation on the provided match: 1 -> period 1 detected, period 2 None; 2 -> both detected
   kicker_r: 2.0          # m, the kicker stands at the ball on the centre spot (~1-2 m plus tracking error)
   setup_s: 2.0           # s, the set-up lasts seconds; shorter matches of the pattern are transient
   centre_r: 1.5          # m, ball seen this close to the spot is recorded as supporting evidence only
   lookback_s: 30         # s, rows before the period start also scanned, so a formation straddling it is whole
   max_after_start_s: 300  # s, a half's kick-off comes within minutes of its graded start; a later "formation" can be a restart after a goal or a long stoppage, and masking up to it would turn real play into D
-  run_speed: 2.0         # m/s, mean speed of the tracked players above which they are running (play); walk-on and set-up are walking (cf. features.slow_speed 1.1)
-  max_live_share: 0.2    # share of frames between the period start and the formation with running players: a dead period before a kick-off has few, a period with a goal restart has many (play is mostly running)
+  run_speed: 2.0         # m/s, mean speed of the tracked players above which they are running. Heuristic, set between two observed cases (an external IDSSE goal restart, live share 0.45; the provided second half, 0.05), not a priori
+  max_live_share: 0.2    # share of frames between the period start and the formation with running players above which the formation is taken for a goal restart. Heuristic, set between the same two observed cases (0.45 vs 0.05), not a priori

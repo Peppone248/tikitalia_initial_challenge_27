@@ -162,3 +162,11 @@ Note: for tcn_change the (beta, w) selection uses the 6 training matches of each
 
 criterion: SODDISFATTO
 
+
+## Kick-off rule (seqmodel/kickoff.py, config `kickoff`)
+
+Frames of a graded period before its detected kick-off are set to D after decoding (predict.py and the evaluation path; switch `kickoff.enabled`). The kick-off is recognised from the players (Law 8: teams in their own halves, a kicker at the centre spot), the ball being only supporting evidence; only a kick-off within 300 s of the period start is accepted.
+
+- Leave-one-match-out cannot exercise the rule: IDSSE halves start at the kick-off, 14/14 halves give no detection and 0 frames change. The only evidence is the provided match against the FAQ kick-off frames: period 1 detected +17 frames after the first graded frame, period 2 detected 12 frames after 113,742 (12 frames of live play labelled D). The rule changed 2,037 labels (1,315 H and 722 A -> D).
+- Tolerances, not derived from the Laws: `max_intruders` = 2 was chosen after observing that the provided second-half kick-off was missed with 1 (two players of one team inside the circle during the set-up); no labels used. Ablation on the provided match: 1 -> period 1 detected, period 2 None; 2 -> both detected.
+- `run_speed` 2.0 m/s and `max_live_share` 0.2 (guard against taking a goal restart for the start) are heuristic, set between two observed cases: an external IDSSE goal restart (live share 0.45) and the provided second half (0.05). Known gap: a calm, walking passage before a restart-like formation is still accepted.

@@ -2,7 +2,9 @@ import dataclasses
 
 import numpy as np
 
-from seqmodel.kickoff import apply_kickoff, detect_kickoff, find_kickoffs
+import pytest
+
+from seqmodel.kickoff import KC, apply_kickoff, detect_kickoff, kickoff_rows
 from seqmodel.match import Match
 
 FORM = 75       # 3 s of formation before the kick
@@ -54,12 +56,14 @@ def test_no_formation_or_no_kicker_gives_none():
     assert detect_kickoff(build(no_kicker=True), 1) is None
 
 
-def test_late_formation_is_not_the_period_start():
-    m = build((700, 700))               # formation 700 rows after the start: 28 s, inside search_s
-    assert abs(detect_kickoff(m, 1) - 700) <= 3
-    m = build((400, 400))
-    short = dataclasses.replace(m, period=np.where(np.arange(1600) < 100, 1, 2).astype(np.int8))
-    assert detect_kickoff(short, 2) is None or detect_kickoff(short, 2) >= 100
+def test_known_gap_calm_play_before_formation_is_accepted():
+    """Documents the gap of the live_share guard: a calm (walking) passage before a restart-like
+    formation is indistinguishable from a walk-on, so the formation is taken as the kick-off."""
+    m = build((700, 700))               # formation 28 s after the start, inside max_after_start_s
+    k = detect_kickoff(m, 1)
+    assert abs(k - 700) <= 3
+    out = apply_kickoff(np.zeros(1600, dtype=np.int8), m, (1,))
+    assert (out[:k] == 2).all() and (out[k:800] == 0).all()
 
 
 def test_apply_sets_exactly_before(capsys):
@@ -75,7 +79,6 @@ def test_apply_sets_exactly_before(capsys):
 
 
 def test_formation_beyond_window_leaves_period_unchanged(capsys):
-    from seqmodel.kickoff import KC
     m = build((700, 700))               # 700 frames = 28 s after the period start
     lab = np.zeros(1600, dtype=np.int8)
     old = KC["max_after_start_s"]
@@ -95,3 +98,60 @@ def test_running_play_before_formation_is_a_restart_not_a_start():
     px[:600] = 30 * np.sin(t / 6.0 + np.arange(22)[None, :])     # all players running fast
     assert detect_kickoff(dataclasses.replace(m, px=px), 1) is None
     assert abs(detect_kickoff(m, 1) - 700) <= 3
+
+
+def _intruders(m, n):
+    """n away players inside the circle (not at the spot) during period 1's formation."""
+    px, py = m.px.copy(), m.py.copy()
+    for j in range(n):
+        px[400 - FORM:400, 11 + j], py[400 - FORM:400, 11 + j] = 5.0, 0.5 * j
+    return dataclasses.replace(m, px=px, py=py)
+
+
+def test_intruder_tolerance_boundary():
+    n = KC["max_intruders"]
+    assert abs(detect_kickoff(_intruders(build((400, 400)), n), 1) - 400) <= 3
+    assert detect_kickoff(_intruders(build((400, 400)), n + 1), 1) is None
+
+
+def test_kicker_from_both_teams_is_no_kickoff():
+    m = build((400, 400))
+    px, py = m.px.copy(), m.py.copy()
+    px[400 - FORM:400, 11], py[400 - FORM:400, 11] = -0.4, 0.0
+    assert detect_kickoff(dataclasses.replace(m, px=px, py=py), 1) is None
+
+
+def test_kickoff_up_to_one_second_before_period_start_changes_nothing():
+    m = build((400, 400))
+    period = m.period.copy()
+    period[:410] = 0                     # graded period 1 starts 10 frames after the kick
+    m = dataclasses.replace(m, period=period)
+    k = detect_kickoff(m, 1)
+    assert k == 410                      # clipped to the first row of the period
+    lab = np.zeros(1600, dtype=np.int8)
+    assert (apply_kickoff(lab, m, (1,)) == lab).all()
+
+
+def test_formation_shorter_than_setup_is_none(monkeypatch):
+    assert detect_kickoff(build((400, 400)), 1) is not None
+    monkeypatch.setitem(KC, "setup_s", 4.0)          # formation lasts 3 s
+    assert detect_kickoff(build((400, 400)), 1) is None
+
+
+def _with_break(gap):
+    """Formation of period 1 interrupted for `gap` frames (3 home players on the wrong side)."""
+    m = build((400, 400))
+    px = m.px.copy()
+    px[400 - 30:400 - 30 + gap, 1:4] = 20.0
+    return dataclasses.replace(m, px=px)
+
+
+def test_runs_separated_by_less_than_half_a_second_are_merged():
+    assert abs(detect_kickoff(_with_break(8), 1) - 400) <= 3        # 45 + 22 frames bridged
+    assert detect_kickoff(_with_break(20), 1) is None               # 45 and 10 frames, each < 2 s
+
+
+def test_kickoff_rows_one_detection_and_warning_per_period(capsys):
+    rows = kickoff_rows(build(wrong_halves=True), (1, 2))
+    assert rows == {1: None, 2: None}
+    assert capsys.readouterr().err.count("WARNING") == 2

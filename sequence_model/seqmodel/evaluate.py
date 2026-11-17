@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from .decode import count_transitions, decode
-from .kickoff import apply_kickoff
+from .kickoff import apply_kickoff, kickoff_rows
 from .match import CFG, controlled_labels
 from .degrade import degrade
 
@@ -130,10 +130,11 @@ def lomo_multi(matches, make_predictor, seed, cfg, decoders, progress=None):
         gt = controlled_labels(m.label)
         t2 = time.time()
         _log(f"  [fold {m.name}] test-match predict: {t2 - t1:.1f}s")
+        ko_rows = kickoff_rows(test, test.graded_periods) if CFG["kickoff"]["enabled"] else None
         for k, dec in decoders.items():
             out, info = dec(ctx)
-            if CFG["kickoff"]["enabled"]:       # same final step as scripts/predict.py
-                out = apply_kickoff(out, test, test.graded_periods)
+            if ko_rows is not None:             # same final step as scripts/predict.py
+                out = apply_kickoff(out, test, test.graded_periods, ko_rows)
             r = pm.evaluate(gt, np.asarray(out, dtype=gt.dtype))
             rows[k].append(dict(match=m.name, spellF1=r["spell_f1_mean"], macroF1=r["macro_f1"],
                                 n_pred_poss=r["n_pred_spells"], n_true_poss=r["n_gt_spells"],

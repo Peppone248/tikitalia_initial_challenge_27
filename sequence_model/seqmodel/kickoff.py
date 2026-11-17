@@ -120,15 +120,26 @@ def detect_kickoff(m, period, info=False):
     return None
 
 
-def apply_kickoff(labels, m, periods):
-    """Copy of labels with D on every frame of each given period before its detected kick-off."""
-    out = np.array(labels, copy=True)
+def kickoff_rows(m, periods):
+    """{period: kick-off row or None}, one detection per period; a warning to stderr per period
+    without detection."""
+    rows = {}
     for per in periods:
-        k = detect_kickoff(m, per)
-        if k is None:
+        rows[per] = detect_kickoff(m, per)
+        if rows[per] is None:
             print(f"WARNING: no kick-off detected in period {per} of {m.name}: labels unchanged",
                   file=sys.stderr)
-            continue
-        sel = np.flatnonzero(m.period == per)
-        out[sel[sel < k]] = D
+    return rows
+
+
+def apply_kickoff(labels, m, periods, rows=None):
+    """Copy of labels with D on every frame of each given period before its detected kick-off.
+    rows = precomputed kickoff_rows(m, periods) (no detection, no warning), else detected here."""
+    rows = kickoff_rows(m, periods) if rows is None else rows
+    out = np.array(labels, copy=True)
+    for per in periods:
+        k = rows.get(per)
+        if k is not None:
+            sel = np.flatnonzero(m.period == per)
+            out[sel[sel < k]] = D
     return out
