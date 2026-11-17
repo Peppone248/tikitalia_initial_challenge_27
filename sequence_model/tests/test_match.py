@@ -45,6 +45,11 @@ def test_load_idsse_roundtrip(tmp_path):
     assert (m.length, m.width) == (105.0, 68.0)
     assert m.px.shape == (T, P)
     assert m.home_attacks_right == {1: True, 2: True}
+    assert m.ball_z is None                 # source without ball height
+    z = dict(np.load(path))
+    z["ball_z"] = np.arange(T, dtype=np.float64)
+    np.savez(path, **z)
+    assert load_idsse(str(path)).ball_z.tolist() == list(range(T))
 
 
 def test_attack_direction_nan_heavy_and_late_substitute():

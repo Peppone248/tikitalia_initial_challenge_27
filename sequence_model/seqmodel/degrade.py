@@ -1,9 +1,11 @@
 """Degrade clean tracking so it looks like the provided match's automatic tracking: ball missing
-mostly in dead ball, gaps in live play, broken player tracks. Returns a copy; deterministic per seed."""
+mostly in dead ball, lost in the keeper's hands, gaps in live play, broken player tracks. Returns a
+copy; deterministic per seed."""
 from dataclasses import replace
 
 import numpy as np
 
+from .keeper import deepest, in_own_box, runs, team_signs
 from .match import CFG, D
 
 
@@ -32,6 +34,32 @@ def _hide_live_gaps(rng, hidden, live, target, quantiles, fps, max_iter):
     raise RuntimeError(f"live_seen_target {target} not reached in {max_iter} gaps")
 
 
+def keeper_holds(m, cfg):
+    """Keeper holds on CLEAN tracking: stretches of >= keeper_hold_s where the ball is higher than
+    keeper_hold_z, within keeper_hold_r of a team's deepest player, and that player is inside his own
+    penalty area. Returns [(start, end, team)) with team 0 = H, 1 = A; never across a period
+    boundary; [] when the match has no ball height."""
+    if m.ball_z is None:
+        return []
+    fps = CFG["fps"]
+    bx, by = np.asarray(m.ball_x, float), np.asarray(m.ball_y, float)
+    bz = np.asarray(m.ball_z, float)
+    sg_h = team_signs(m)
+    out = []
+    for tid, sg in ((0, sg_h), (1, -sg_h)):
+        c = m.team == tid
+        kx, ky, _ = deepest(m.px[:, c].astype(float), m.py[:, c].astype(float), sg)
+        with np.errstate(invalid="ignore"):
+            hold = ((bz > cfg["keeper_hold_z"]) & (np.hypot(bx - kx, by - ky) <= cfg["keeper_hold_r"])
+                    & in_own_box(kx, ky, sg, m.length))
+        for per in np.unique(m.period):
+            idx = np.flatnonzero(m.period == per)
+            for s, e in runs(hold[idx]):
+                if e - s >= round(cfg["keeper_hold_s"] * fps):
+                    out.append((int(idx[s]), int(idx[e - 1]) + 1, tid))
+    return sorted(out)
+
+
 def degrade(m, seed, cfg):
     rng = np.random.default_rng(seed)
     fps = CFG["fps"]
@@ -46,6 +74,14 @@ def degrade(m, seed, cfg):
     for s, e in zip(starts, ends):
         if is_d[s] and rng.random() < cfg["dead_hide_p"]:
             hidden[s:e] = True
+
+    # keeper holds: the ball is lost in the keeper's hands with probability keeper_hide_p. A separate
+    # random stream, so keeper_hide_p = 0 reproduces the previous degradation exactly
+    if cfg.get("keeper_hide_p", 0) > 0:
+        rng_k = np.random.default_rng([seed, 1])
+        for s, e, _ in keeper_holds(m, cfg):
+            if rng_k.random() < cfg["keeper_hide_p"]:
+                hidden[s:e] = True
 
     # live ball: gaps until the seen share of live frames reaches the target
     live = ~is_d
@@ -76,6 +112,10 @@ def degrade(m, seed, cfg):
         px[drop, j] = np.nan
         py[drop, j] = np.nan
 
-    return replace(m, px=px, py=py, ball_x=ball_x, ball_y=ball_y, label=m.label.copy(),
+    ball_z = None
+    if m.ball_z is not None:
+        ball_z = np.asarray(m.ball_z, float).copy()
+        ball_z[hidden] = np.nan
+    return replace(m, px=px, py=py, ball_x=ball_x, ball_y=ball_y, ball_z=ball_z, label=m.label.copy(),
                    team=m.team.copy(), period=m.period.copy(),
                    home_attacks_right=dict(m.home_attacks_right))

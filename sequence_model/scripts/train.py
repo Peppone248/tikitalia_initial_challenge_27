@@ -17,6 +17,7 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
+from seqmodel.clean import clean_if_enabled  # noqa: E402
 from seqmodel.decode import count_transitions  # noqa: E402
 from seqmodel.degrade import degrade  # noqa: E402
 from seqmodel.match import CFG, controlled_labels, load_idsse  # noqa: E402
@@ -36,7 +37,7 @@ def train(matches, seed, out, cfg_tcn=None, cfg_degrade=None):
     cfg_tcn = CFG["tcn"] if cfg_tcn is None else cfg_tcn
     cfg_degrade = CFG["degrade"] if cfg_degrade is None else cfg_degrade
     t0 = time.time()
-    deg = [degrade(m, seed + j, cfg_degrade) for j, m in enumerate(matches)]
+    deg = [clean_if_enabled(degrade(m, seed + j, cfg_degrade)) for j, m in enumerate(matches)]
     print(f"[train] degraded {len(deg)} matches: {time.time() - t0:.1f}s", file=sys.stderr, flush=True)
     pred = TCNPredictor(seed, cfg_tcn).fit(deg)
     print(f"[train] fit: {time.time() - t0:.1f}s", file=sys.stderr, flush=True)
@@ -44,7 +45,8 @@ def train(matches, seed, out, cfg_tcn=None, cfg_degrade=None):
     export_weights(pred.model, out)
     labs = [controlled_labels(t.label) for t in deg]
     trans = count_transitions(labs, [t.period for t in deg])
-    blocks = {"tcn": cfg_tcn, "degrade": cfg_degrade}
+    blocks = {"tcn": cfg_tcn, "degrade": cfg_degrade, "features": CFG["features"],
+              "keeper": CFG["keeper"], "clean": CFG["clean"]}
     side = dict(trans={k: float(v) for k, v in trans.items()}, prior=None, beta=0, w=1.0, seed=seed,
                 matches=[m.name for m in matches], git_commit=_commit(),
                 config_hash=hashlib.sha256(json.dumps(blocks, sort_keys=True).encode()).hexdigest(),

@@ -31,6 +31,13 @@ Compares `frame`, `tcn`, `tcn_change` and `baseline50`. Runtime about 45-60 min 
 - `p_change` is the probability of a direct H<->A change within +-`change_k` frames of the frame; the decoder raises the H<->A rate by `1 + beta * p_change`.
 - Caveat: absolute LOMO scores are optimistic (the degradation hides the ball on the held-out match's true dead-ball runs). Only relative comparisons are fair.
 
+## Goalkeeper fix (no roles in the data: the keeper is a team's deepest player inside its own penalty area)
+
+- Degradation (`degrade.keeper_holds`): on the CLEAN IDSSE data a hold is the ball above 0.5 m, within 1 m of the keeper, for at least 1 s; the ball is hidden there with probability `degrade.keeper_hide_p` (the provided tracker loses the ball in the keeper's hands). `ball_z` is read from the IDSSE `.npz` into `Match.ball_z` (None for the ATD).
+- Feature `keeper_ball` (odd): 1 for a team whose keeper has the last-seen ball within `features.keeper_r`, reported H - A.
+- Cleaning (`clean.clean_keepers`, REPORT_B 10.2 without roles): a stretch of a team's keeper slot inside the opponent's penalty area that never touches its own half is the other keeper; it is moved to the other team (frozen points dropped). Applied after loading the ATD and after the degradation in evaluation and training (no change on the 7 IDSSE matches, clean or degraded).
+- Switches: `degrade.keeper_hide_p: 0` and `features.keeper_ball: false` restore the previous data and feature set; `clean.enabled: false` the raw tracking. Changing `features.keeper_ball` changes the input size: weights trained with the other setting are refused as stale.
+
 ## 3. Train (the weights are already in the repo)
 
 `sequence_model/weights/tcn_idsse.npz` and `tcn_idsse_decode.json` are versioned; retrain only if needed:

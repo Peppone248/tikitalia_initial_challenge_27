@@ -26,6 +26,7 @@ class Match:
     width: float
     home_attacks_right: dict  # {period: bool}, True when home attacks towards +x
     graded_periods: tuple = (1, 2)  # periods whose frames are graded; the others are written as X
+    ball_z: np.ndarray = None # (T,) ball height in metres, or None when the source has none (the provided ATD)
 
 
 def controlled_labels(label, min_frames=None):
@@ -83,7 +84,8 @@ def load_idsse(path):
                   px=z["px"].astype(np.float32), py=z["py"].astype(np.float32),
                   team=z["player_team"].astype(np.int8), ball_x=z["ball_x"], ball_y=z["ball_y"],
                   period=z["period"].astype(np.int8), label=label, length=length, width=width,
-                  home_attacks_right={})
+                  home_attacks_right={},
+                  ball_z=np.asarray(z["ball_z"], dtype=float) if "ball_z" in z.files else None)
     m.home_attacks_right = attack_direction(m)
     return m
 
@@ -164,5 +166,12 @@ def load_atd(path_xml, path_txt):
     rep = starter.check_alignment(ds)
     if not rep["agrees"]:
         raise ValueError(f"ATD is not one record per video frame from 1: {rep}")
-    return match_from_atd(ds, games.GAMES[games.GAME]["pitch"], games.half_video_blocks(games.GAME),
-                          name=os.path.splitext(os.path.basename(path_xml))[0])
+    m = match_from_atd(ds, games.GAMES[games.GAME]["pitch"], games.half_video_blocks(games.GAME),
+                       name=os.path.splitext(os.path.basename(path_xml))[0])
+    if CFG["clean"]["enabled"]:
+        from .clean import clean_keepers
+        m, fixes = clean_keepers(m)
+        print(f"[clean] {len(fixes)} keeper stretches moved: "
+              f"{sum(f['moved'] for f in fixes)} frames moved, {sum(f['dropped'] for f in fixes)} "
+              f"frozen frames dropped", file=sys.stderr)
+    return m

@@ -1,10 +1,13 @@
 """Per-frame features for the sequence model. Team-level x quantities are computed in each team's
 own attacking frame and reported as H - A (odd under team swap); ball_x_att is the ball x in H's
-attacking frame. See config.yaml `features` for every constant."""
+attacking frame. keeper_ball (switchable) is 1 for a team whose keeper (deepest player, inside his
+own penalty area) has the last-seen ball within keeper_r, reported as H - A. See config.yaml
+`features` for every constant."""
 import dataclasses
 
 import numpy as np
 
+from .keeper import deepest, in_own_box
 from .match import CFG
 
 FC = CFG["features"]
@@ -14,7 +17,8 @@ RADII = FC["near_radii"]
 FEATURES = (["ball_seen", "ball_unseen_s", "ball_speed", "ball_line_dist", "ball_x_att",
              "nearest_dist"] + [f"n_within_{r}" for r in RADII] +
             ["centroid_x", "def_line", "front_line", "width", "length", "v_forward",
-             "mean_speed", "mean_speed_all", "ball_out", "slow_unseen"])
+             "mean_speed", "mean_speed_all", "ball_out", "slow_unseen"] +
+            (["keeper_ball"] if FC["keeper_ball"] else []))
 _EVEN = {"ball_seen", "ball_unseen_s", "ball_speed", "ball_line_dist", "mean_speed_all",
          "ball_out", "slow_unseen"}
 ODD = np.array([f not in _EVEN for f in FEATURES])
@@ -136,6 +140,15 @@ def _period_features(m):
     }
     for k in h:
         cols[k] = h[k] - a[k]
+    if FC["keeper_ball"]:
+        kb = []
+        for tid, sg in ((0, sg_h), (1, -sg_h)):
+            c = m.team == tid
+            kx, ky, _ = deepest(px[:, c], py[:, c], sg)
+            with np.errstate(invalid="ignore"):
+                kb.append((in_own_box(kx, ky, sg, m.length) &
+                           (np.hypot(bx - kx, by - ky) <= FC["keeper_r"])).astype(float))
+        cols["keeper_ball"] = kb[0] - kb[1]
     return np.stack([cols[f] for f in FEATURES], axis=1).astype(np.float32)
 
 
@@ -147,6 +160,7 @@ def frame_features(m):
         sel = m.period == per
         sub = dataclasses.replace(
             m, px=m.px[sel], py=m.py[sel], ball_x=np.asarray(m.ball_x)[sel],
-            ball_y=np.asarray(m.ball_y)[sel], period=m.period[sel], label=m.label[sel])
+            ball_y=np.asarray(m.ball_y)[sel], period=m.period[sel], label=m.label[sel],
+            ball_z=None if m.ball_z is None else np.asarray(m.ball_z)[sel])
         out[sel] = _period_features(sub)
     return out

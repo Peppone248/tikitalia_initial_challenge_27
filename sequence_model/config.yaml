@@ -11,6 +11,19 @@ degrade:                 # makes clean external tracking look like the provided 
   player_drop_frac: 0.07 # share of each player's frames lost to broken tracks (short stretches of 1-10 s)
   player_drop_s: [1, 10] # s, min and max length of a lost-track stretch: automatic tracking loses a player for a few seconds at a time
   max_iter: 100000       # safety cap on gap/stretch draws; hitting it means a target is unreachable and raises
+  keeper_hide_p: 0.8     # probability that a keeper hold (ball in the keeper's hands, detected on the CLEAN data) loses the ball: the provided tracker usually loses it in the keeper's hands (REPORT_B 12.1); a priori, same value as dead_hide_p. 0 restores the previous degradation exactly
+  keeper_hold_z: 0.5     # m, ball height above which it is in the hands, not at the feet (a ball on the ground is ~0.1 m); same as REPORT_B 12.3
+  keeper_hold_r: 1.0     # m, ball within this of the keeper: held, not merely near (REPORT_B 12.3)
+  keeper_hold_s: 1.0     # s, minimum hold: shorter is a header, a punch or a deflection, not a catch (REPORT_B 12.3)
+keeper:                  # goalkeeper proxy shared by degrade, features and clean: no roles in the data, so the keeper is a team's deepest player (in its own attacking frame) inside its own penalty area
+  box_depth: 16.5        # m, penalty area depth from the goal line (Laws of the Game)
+  box_half_width: 20.16  # m, half of the 40.32 m penalty area width (Laws of the Game)
+clean:                   # tracking cleaning (clean.py): obvious tracker errors fixed by a general rule (REPORT_B 10.2, keeper identity)
+  enabled: true          # False leaves the tracking untouched
+  jump_m: 2.5            # m between two consecutive frames: 62 m/s, another person; a track stretch ends here or at a gap (REPORT_B 10.2)
+  min_box_s: 0.5         # s inside the opponent's penalty area before a stretch can be moved: box-edge jitter (REPORT_B 10.2)
+  frozen_s: 2.0          # s of identical coordinates inside a moved stretch: a frozen ghost, dropped instead of moved (REPORT_B 10.2)
+  min_keeper_share: 0.5  # the keeper slot of a team is the column most often its deepest player in the period; it must be the deepest on at least half of its own tracked frames, otherwise no slot is trusted and nothing is moved (conservative: no position_type in our data)
 atd:                     # plausibility of the provided automatic tracking after conversion (match.match_from_atd)
   min_mean_tracked: 10   # mean tracked player slots per graded frame: the provided match averages ~20.5, so below 10 the conversion dropped coordinates (e.g. slots not matched)
   min_tracked_share: 0.9 # share of graded frames with at least one tracked player: play is tracked almost everywhere in the halves
@@ -24,6 +37,8 @@ features:
   shape_quantiles: [0.1, 0.9]   # robust extent of a team (width, length) ignoring outliers such as the keeper
   max_player_speed: 12   # m/s, human sprint limit (same as V_PLAYER_MAX of the team's model); faster is a tracking glitch and counts as unknown
   max_ball_speed: 40     # m/s, physical limit of a kicked ball (same as the ball detector's); faster is a glitch and gives the neutral speed 0
+  keeper_ball: true      # the keeper_ball feature (H - A of "the keeper has the last-seen ball"); False restores the previous feature set exactly (and the shipped weights' input size)
+  keeper_r: 3.0          # m, last-seen ball within this of the keeper (deepest player inside his own box) counts as his: a priori, the playing distance (near_radii[0]); wider than keeper_hold_r because the last-seen ball is where the tracker lost it, not where he holds it now
 decode:                  # 3-state HMM decoder (decode.py)
   min_frames: {H: 20, A: 20, D: 50}   # 0.8 s / 0.8 s / 2 s: shortest plausible possession and stoppage; enforced by chains of that many sub-states
   change_every_s: 20     # a priori: a possession change H<->A every 20 s of possession (default transition rate)

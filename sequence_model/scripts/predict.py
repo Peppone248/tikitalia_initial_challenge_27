@@ -13,6 +13,7 @@ import numpy as np
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
+from seqmodel.clean import clean_if_enabled  # noqa: E402
 from seqmodel.decode import decode  # noqa: E402
 from seqmodel.kickoff import apply_kickoff, kickoff_rows  # noqa: E402
 from seqmodel.infer import NumpyTCN  # noqa: E402
@@ -24,9 +25,9 @@ _LETTER = {CFG["labels"][k]: k for k in "HADX"}
 def load_match(path):
     ext = os.path.splitext(path)[1].lower()
     if ext == ".npz":
-        return load_idsse(path)
+        return clean_if_enabled(load_idsse(path))
     if ext == ".xml":
-        return load_atd(path, os.path.splitext(path)[0] + ".txt")
+        return load_atd(path, os.path.splitext(path)[0] + ".txt")      # cleaned inside (clean.enabled)
     raise ValueError(f"unsupported match file {path!r}: expected .npz (IDSSE) or .xml (ATD)")
 
 

@@ -11,6 +11,7 @@ import pandas as pd
 from .decode import count_transitions, decode
 from .kickoff import apply_kickoff, kickoff_rows
 from .match import CFG, controlled_labels
+from .clean import clean_if_enabled
 from .degrade import degrade
 
 _REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -103,7 +104,8 @@ def lomo_multi(matches, make_predictor, seed, cfg, decoders, progress=None):
     decoders {name: f(ctx) -> (labels, info)}. Returns {name: DataFrame}. progress(match, seconds)
     is called after every fold."""
     rows = {k: [] for k in decoders}
-    deg = {j: degrade(m, seed + j, cfg) for j, m in enumerate(matches)}
+    # the observed tracking goes through the same cleaning as the provided match (scripts/predict.py)
+    deg = {j: clean_if_enabled(degrade(m, seed + j, cfg)) for j, m in enumerate(matches)}
     for i, m in enumerate(matches):
         t0 = time.time()
         train = [deg[j] for j in range(len(matches)) if j != i]
