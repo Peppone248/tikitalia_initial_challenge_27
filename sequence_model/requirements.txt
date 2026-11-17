@@ -1,8 +1,11 @@
-numpy
-pandas
-pyyaml
-pytest
-torch  # CPU build; needed only for training the TCN (seqmodel/tcn.py)
+# Exact versions used to train the shipped weights and to produce the submitted CSV
+# (Python 3.13.5, Windows 64-bit). Install from the repository root:
+#   sequence_model/.venv/Scripts/python.exe -m pip install -r sequence_model/requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+numpy==2.5.4
+pandas==3.1.1
+PyYAML==6.0.3
+pytest==9.2.0
+torch==2.15.0+cpu  # CPU build; needed only for training the TCN (seqmodel/tcn.py); inference is plain numpy
 
 # needed only to read the provided ATD (seqmodel.match.load_atd, via starter/load_atd.py)
 kloppy==3.18.0

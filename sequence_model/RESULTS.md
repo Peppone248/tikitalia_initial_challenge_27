@@ -170,3 +170,32 @@ Frames of a graded period before its detected kick-off are set to D after decodi
 - Leave-one-match-out cannot exercise the rule: IDSSE halves start at the kick-off, 14/14 halves give no detection and 0 frames change. The only evidence is the provided match against the FAQ kick-off frames: period 1 detected +17 frames after the first graded frame, period 2 detected 12 frames after 113,742 (12 frames of live play labelled D). The rule changed 2,037 labels (1,315 H and 722 A -> D).
 - Tolerances, not derived from the Laws: `max_intruders` = 2 was chosen after observing that the provided second-half kick-off was missed with 1 (two players of one team inside the circle during the set-up); no labels used. Ablation on the provided match: 1 -> period 1 detected, period 2 None; 2 -> both detected.
 - `run_speed` 2.0 m/s and `max_live_share` 0.2 (guard against taking a goal restart for the start) are heuristic, set between two observed cases: an external IDSSE goal restart (live share 0.45) and the provided second half (0.05). Known gap: a calm, walking passage before a restart-like formation is still accepted.
+
+## Goalkeeper fix (keeper holds, `keeper_ball` feature, keeper identity cleaning)
+
+Measurements made while implementing the fix (commit fab8b43). The full two-seed table with the fix
+is reported separately once it has run.
+
+**Hold detection on clean IDSSE** (ball > 0.5 m, within 1 m of the team's deepest player, inside its
+own penalty area, ≥ 1 s): 77 holds, 4,550 frames over the 7 matches (6/11/14/16/11/10/9 per match);
+every hold frame is live (never D) and 99.6% belong to the keeper's team.
+
+**One held-out fold** (J03WOY, the match with most holds; seed 2027; trained on the other 6 degraded
+matches; decoding as shipped; kick-off rule on). "Before" = no keeper hiding in training and no
+`keeper_ball` (18 features); "after" = defaults (19 features). Metric on the 895 true hold frames:
+
+| test degradation | model | D share on holds | own-team share on holds | match spellF1 | macroF1 |
+|---|---|---|---|---|---|
+| holds hidden | before | 0.109 | 0.887 | 0.5635 | 0.8589 |
+| holds hidden | after | **0.000** | **1.000** | 0.5588 | 0.8659 |
+| holds seen | before | 0.125 | 0.873 | 0.5685 | 0.8591 |
+| holds seen | after | **0.000** | **1.000** | 0.5563 | 0.8638 |
+
+The whole-match spellF1 change (−0.005 / −0.012) is from a single fold and seed, within its noise.
+
+**Keeper identity cleaning:** 0 corrections on the 7 IDSSE matches (clean and degraded); on the
+provided match 14 keeper stretches moved (11,734 frames) and 5,826 frozen frames dropped.
+
+**Provided match, no ground truth used:** graded frames predicted D in "keeper situations" (a team's
+deepest player inside its own penalty area with the last-seen ball within 3 m): 2,684 with the
+original model, 1,108 with the fix (−58%).
