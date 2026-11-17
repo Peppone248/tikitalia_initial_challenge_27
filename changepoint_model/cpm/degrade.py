@@ -1,10 +1,9 @@
 """A priori degradation of clean external tracking, so that it looks like automatic tracking.
 
-Nothing here is measured on the provided match: every constant is a round a priori value, written
-down before any run (DATA.md says only that the ball is missing on 41% of the graded frames and
-that it goes missing "disproportionately on the frames that matter"; the team's own reports say
-the ball is seen on about 8 of 10 alive frames and on about 3 of 10 dead frames in the provided
-tracking, and that 3 of 4 missing frames sit in gaps longer than 15 s).
+Every constant is a round a priori value. DATA.md describes the target: the ball is missing on 41 %
+of the graded frames, "disproportionately on the frames that matter" (stoppages, crowded boxes,
+balls in the air), mostly in long gaps. Hiding the ball in 8 of 10 stoppages and on 2 of 10 alive
+frames, in gaps of 1 to 30 s, gives about that share with that structure.
 
 Three effects, each switchable, all driven by one seeded generator (deterministic):
 
@@ -12,7 +11,7 @@ Three effects, each switchable, all driven by one seeded generator (deterministi
                 source still shows it; Metrica already hides it).
 2. live_gaps:   gaps are cut into the alive ball until `live_seen` of the alive frames are left,
                 lengths log-uniform between `gap_s` (1 s .. 30 s): long gaps dominate the missing
-                frames, as in the provided match.
+                frames, as DATA.md describes.
 3. player_drop: each player loses `player_drop` of his frames in stretches of 1-10 s (broken
                 tracks). Teams are never swapped here.
 

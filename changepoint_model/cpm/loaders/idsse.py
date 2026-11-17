@@ -1,6 +1,5 @@
-"""IDSSE matches from the .npz written by HMM_first_imp/validation/fetch_idsse.py (or the copy in
-sequence_model/scripts/fetch_idsse.py): DFL coordinates are already metres with the origin at the
-centre spot. Labels: D where BallStatus is not 'alive', else H / A from BallPossession."""
+"""IDSSE and PFF matches from the .npz written by data_prep/fetch_idsse.py and data_prep/fetch_pff.py:
+coordinates are already metres with the origin at the centre spot. Labels: D where BallStatus is not 'alive', else H / A from BallPossession."""
 
 import os
 

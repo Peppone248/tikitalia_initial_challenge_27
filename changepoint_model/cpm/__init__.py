@@ -8,10 +8,14 @@ Layout
     degrade.py    a priori degradation of clean tracking (ball hidden in stoppages, random gaps,
                   broken player tracks), seeded and deterministic
     features.py   per-frame features, split into even and odd under the team swap
-    models.py     symmetric logistic frame classifier, boundary classifiers (numpy only)
+    models.py     symmetric logistic team model, boosted state and boundary classifiers
+    seq.py        bidirectional GRU for P(home) (torch to train, numpy to predict)
+    pipeline.py   prepare -> predict -> decode
     decode.py     3-state HMM with minimum durations whose transition hazards follow the boundary
                   classifiers (time-varying Viterbi)
-    evaluate.py   the official scorer applied to a prediction, leave-one-match-out helpers
+    kickoff.py    Law 8: no play before each kick-off (Smart Tagging kick-off tag)
+    whistle.py    Law 5: whistle blasts from the audio, play stops at the whistle
+    evaluate.py   the official scorer applied to a prediction
 """
 
-__version__ = "0.1.0"
+__version__ = "4.2"

@@ -4,8 +4,8 @@ CHALLENGE.md: a possession is a maximal run of one team with the ball alive, the
 the moment it leaves play (or the whistle) to the restart, and possession stays with the last team
 until the other team gains control. Read on the events:
 
-- before the first SET PIECE of a period: X (not graded; the provided ground truth starts at the
-  kick-off);
+- before the first SET PIECE of a period: X (not graded: a period is graded from its kick-off,
+  CHALLENGE.md);
 - a SET PIECE (kick-off, throw-in, free kick, corner, goal kick), or a PASS whose subtype says
   GOAL KICK, *restarts* play at its start frame for its team;
 - BALL OUT: dead from the first frame the ball is unseen after the event's start (the crossing),

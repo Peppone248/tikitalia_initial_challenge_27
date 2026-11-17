@@ -1,136 +1,103 @@
-# changepoint_model — possession from the *changes*, not only the state
+# changepoint_model: ball possession from tracking (submission v4.2)
 
-A self-contained module (numpy, scikit-learn, numba; torch only to train the recurrent heads)
-that labels every frame of the provided match H / A / D, built around one observation from the
-team's reports: the points we lose are the **changes of possession that never get cut**
-(REPORT_B §20: +0.21 spellF1 if every missing change were found, +0.16 if the possessions that
-cover several true ones were cut; §24: raising the HMM's switch rate everywhere only adds wrong
-cuts). The frame-wise classifiers of the earlier models have no notion of a boundary; this module
-gives them one.
+Labels every video frame of the provided match as H / A / D (X outside the two halves) from the
+automatic tracking, with two rules from the Laws of the Game on top. How it works, step by step:
+[HOW_IT_WORKS.md](HOW_IT_WORKS.md).
 
-**New to the model? Start from [HOW_IT_WORKS.md](HOW_IT_WORKS.md)**: layers, workflow, how a frame
-becomes a label, with worked examples.
+## Reproduce the submission
 
-## The idea in one picture
+From the repository root, with the match bundle in `data/` (or `MTAH_DATA_DIR`) and `ffmpeg` on
+the PATH:
 
-```text
-tracking ──► features (odd / even under the team swap)
-                │
-                ├─► P(home | alive)      antisymmetric logistic regression (odd features)
-                ├─► P(dead)              boosted trees (even features + |odd|)
-                └─► P(boundary ±0.5 s)   three boosted heads: team change, stop, restart
-                                          (inputs: even features, |odd|, and the trajectory of
-                                           P(home) around the frame — "stacking")
-                │
-                ▼
-     3-state HMM (H, A, D) with minimum durations whose transition hazard at frame t
-     is the boundary probability at t  ──► Viterbi ──► labels
+```
+python -m venv venv
+venv\Scripts\pip install -r changepoint_model\requirements.txt
+venv\Scripts\python.exe changepoint_model\predict.py --out outputs\tikitalia.csv
+venv\Scripts\python.exe evaluation\validate_submission.py outputs\tikitalia.csv
 ```
 
-Or, with `--heads seq`, one bidirectional GRU replaces the five heads and outputs the same six
-quantities per frame; the decoder is unchanged. Prediction never needs torch (numpy forward pass).
+Expected: SHA-256 `8682095eaa072212e2b0be95e8acb87713c1f7312d474598ce694e263a04491d`, about one
+minute. The first run extracts the audio of the tactical video once
+(`data/tactical/BAR-ATH_tactical_audio.flac`, 16 kHz mono FLAC). Produced with Python 3.10.4,
+the pinned versions of `requirements.txt` and ffmpeg 9.0.2.
 
-### Why a boundary head (state of the art, and what we take from it)
+`python changepoint_model/scripts/check_determinism.py` runs the pipeline twice and compares the
+SHA-256 with `determinism_reference.json` (reference machine).
 
-Frame-based temporal segmentation has the same failure as ours: over-smoothing merges short
-segments. The literature answers with a **separate boundary branch**: ASRF (Ishikawa et al.,
-WACV 2021) predicts frame classes *and* action boundaries and refines the segmentation with the
-boundaries; MS-TCN++ and boundary-aware cascade networks do the same with multi-stage refinement.
-We keep the cheap part of that idea: a boundary classifier trained on "a change within ±k frames",
-turned into a per-frame hazard of the HMM (`decode.py`). Where the hazard is high a cut is cheap
-even if the class posteriors do not swing (the 1–2 s possessions we lose); elsewhere the HMM holds.
+## Pipeline
 
-The team head follows the team's own best practice (REPORT_B §14–16): odd features, no intercept,
-so P(home | teams swapped) = 1 − P(home) exactly. Control votes, contacts (Vidal-Codina et al.
-2022) and the shape transitions ("after minus before") are the features that mattered there.
-
-## Layout
-
-```text
-cpm/match.py        one Match object, whatever the source; attack direction inferred
-cpm/loaders/        idsse.py (the team's .npz), metrica.py (CSV + EPTS), epts.py (FIFA/EPTS raw
-                    text + metadata XML: the provided ATD and Metrica game 3, same parser)
-cpm/labels.py       labels from event data by one mechanical rule (Metrica vocabulary)
-cpm/degrade.py      a priori degradation: ball hidden in stoppages, long live gaps, broken tracks
-cpm/features.py     per-frame features, odd / even
-cpm/models.py       TeamModel (symmetric logistic), EvenModel (hgb | logistic), boundary targets
-cpm/decode.py       time-varying-hazard HMM, Viterbi (numba)
-cpm/seq.py          bidirectional GRU heads (torch to train, numpy to predict)
-cpm/pipeline.py     prepare / fit / predict / decode
-cpm/evaluate.py     the official scorer, the official baseline
-cpm/kickoff.py      Law 8: D before each period's kick-off (Smart Tagging kick-off tag)
-cpm/rule_layers.py  the team's precise dead-ball layers (HMM_first_imp), for evaluation
-scripts/eval_lomo.py    leave-one-match-out on external matches
-scripts/diag_changes.py where the changes are lost
-scripts/train.py        final models from external matches
-scripts/predict_atd.py  the submission: ATD -> tikitalia.csv
-tests/                  pytest
+```
+tracking ─► features (134 per frame) ─► GRU: P(home | ball in play)          ─┐
+                                    └─► boosted trees: P(dead), P(change),     ├─► HMM (H, A, D), hazards from the
+                                        P(stop), P(restart) within ±0.5 s     ─┘   boundary heads, Viterbi
+                                                                                        │
+Smart Tagging kick-off tag ─────────────────────────────► Law 8: D before each kick-off ┤
+audio of the tactical video ─► whistle blasts ──────────► Law 5: D from a whistle that  ┤
+                                                          slows the players down        ▼
+                                                                                   tikitalia.csv
 ```
 
-## Reproduce the submission (v4.2)
+| file | role |
+|---|---|
+| `predict.py` | the submission: provided match -> `frame,label` CSV |
+| `cpm/loaders/` | EPTS (provided ATD, Metrica) and IDSSE / PFF readers, one `Match` format |
+| `cpm/features.py` | the 134 frame features (66 change sign when the teams are swapped, 68 do not) |
+| `cpm/models.py`, `cpm/seq.py` | team logistic, boosted trees, bidirectional GRU (numpy inference) |
+| `cpm/pipeline.py` | prepare -> predict -> decode |
+| `cpm/decode.py` | HMM with minimum durations and time-varying hazards (numba Viterbi) |
+| `cpm/kickoff.py` | Law 8, from the Smart Tagging "Kick Off (Start)" tag |
+| `cpm/whistle.py` | whistle detector (audio) and the whistle rule |
+| `cpm/degrade.py`, `cpm/labels.py`, `cpm/evaluate.py` | training utilities, labels from events, official scorer |
+| `models/cpm_v4_hybrid.pkl` | the submitted model; `cpm_v2_all18.pkl` holds the trees it was built from |
+| `scripts/train.py`, `scripts/make_hybrid.py` | training from external data |
+| `scripts/eval_lomo.py`, `scripts/eval_hybrid.py` | leave-one-match-out evaluation |
+| `data_prep/` | download / conversion of IDSSE and PFF to the `.npz` the loaders read |
+| `tests/` | `python -m pytest changepoint_model/tests` |
 
-```powershell
-# 0. the referee's whistle from the match audio, with the literature profile (REPORT_B 18 and 31:
-#    nothing is calibrated on the provided audio). The audio track of the tactical video, once:
-ffmpeg -i data\tactical\BAR-ATH_tactical.mp4 -vn -ac 1 -ar 16000 -c:a flac data\tactical\BAR-ATH_tactical_audio.flac
-.\venv\Scripts\python.exe HMM_first_imp\scripts\detect_whistles.py --profile config_b/whistle_profile_literature.json --out outputs/whistles/BAR-ATH_whistles_lit.json
-# 1. label the provided match: v4 hybrid model + D before each kick-off (Law 8) + whistle R7a
-.\venv\Scripts\python.exe changepoint_model\scripts\predict_atd.py --models changepoint_model\models\cpm_v4_hybrid.pkl --whistle HMM_first_imp\outputs\whistles\BAR-ATH_whistles_lit.json --out outputs\cpm_v42\tikitalia.csv
-# 2. check the format
-.\venv\Scripts\python.exe evaluation\validate_submission.py outputs\cpm_v42\tikitalia.csv
+## Training data (external only)
+
+| source | matches | labels from | licence / access |
+|---|---|---|---|
+| Metrica Sports sample data | 3 | the published events (rule in `cpm/labels.py`) | public, attribution (`LICENSE-metrica.txt`) |
+| IDSSE, Bundesliga 2022/23 (Bassek et al., Sci. Data 2025) | 7 | DFL ball-status and possession flags | CC BY 4.0, `data_prep/fetch_idsse.py` |
+| PFF FC World Cup 2022 (broadcast tracking) | 8 | PFF game events | free registration, `data_prep/fetch_pff.py` |
+
+No label of the provided match is used anywhere, and no person labelled any frame of it. The
+model files are committed; to retrain:
+
 ```
-
-Expected: SHA-256 `8682095eaa072212e2b0be95e8acb87713c1f7312d474598ce694e263a04491d`, 292 possessions,
-D 44.4 % of the graded frames; two runs give the same file. Needs the team's `HMM_first_imp` and
-`src/tikitalia` (rule code, whistle) next to this module, and the Smart Tagging file (kick-offs).
-
-The model files are committed, so training is optional. To retrain from external data only:
-
-```powershell
 git clone --depth 1 https://github.com/metrica-sports/sample-data ext\metrica
-.\venv\Scripts\python.exe changepoint_model\scripts\train.py --metrica ext\metrica\data --idsse data\idsse --pff data\pff --scenario degraded --seed 2027 --subsample 4 --tune-matches 6 --gammas 4 8 16 --ws 0.25 0.5 --out changepoint_model\models\cpm_v2_all18.pkl
-.\venv\Scripts\python.exe changepoint_model\scripts\make_hybrid.py --trees changepoint_model\models\cpm_v2_all18.pkl --metrica ext\metrica\data --idsse data\idsse --pff data\pff --out changepoint_model\models\cpm_v4_hybrid.pkl
+python changepoint_model\data_prep\fetch_idsse.py
+python changepoint_model\data_prep\unpack_pff.py <PFF download>\*.zip
+python changepoint_model\data_prep\fetch_pff.py --n 8
+python changepoint_model\scripts\train.py --metrica ext\metrica\data --idsse data\idsse --pff data\pff --scenario degraded --seed 2027 --subsample 4 --tune-matches 6 --gammas 4 8 16 --ws 0.25 0.5 --out changepoint_model\models\cpm_v2_all18.pkl
+python changepoint_model\scripts\make_hybrid.py --trees changepoint_model\models\cpm_v2_all18.pkl --metrica ext\metrica\data --idsse data\idsse --pff data\pff --out changepoint_model\models\cpm_v4_hybrid.pkl
 ```
 
-A GRU retrained on another machine or torch version may not give the same weights; the committed
-weights give the same labels everywhere (numpy forward pass).
+A GRU retrained with another torch version or machine may not reproduce the committed weights;
+prediction from the committed weights is deterministic everywhere.
 
-## Rules
+## Validation (leave one match out, official scorer, external matches)
 
-- RULES.md: nothing is trained, tuned or chosen on the provided match or on the public window;
-  every constant is a priori or chosen on external matches (leave one match out); corrections
-  come out of code applied to the whole match; the data stays out of git.
-- Mail of 03/11: the public window is scored once per version, after the choice, as a structure
-  check only (v4, then v4.2).
-- The two rules on top of the model come from the Laws of the Game, not from external data. Law 8
-  (kick-off) is a no-op on the external matches by construction. R7a (whistle) cannot be measured on
-  them: none has audio with labels. It was adopted on Law 5, on a debug pass on the provided video
-  (allowed by RULES.md: watching to debug and design) and on a label-free check printed by
-  `predict_atd.py`; its constants are the team's, unchanged (REPORT_B 18.3). R7b (whistle as a
-  restart) stays off, a decision of the team on label-free statistics of the provided match
-  (REPORT_B 18.4). The whistle profile is written from the literature (REPORT_B 31); the team had
-  measured the provided whistle before writing it, and it falls inside the published band.
-- External data: Metrica sample data (public GitHub repository, README asks for attribution),
-  IDSSE (CC BY 4.0), PFF FC World Cup 2022 (registration).
+| | spellF1 | baseline (smooth 50) |
+|---|---|---|
+| trees only (v2), 8 PFF matches (real broadcast tracker) | 0.583 | 0.365 |
+| trees only (v2), 7 IDSSE / 3 Metrica matches | 0.657 / 0.733 | 0.265 / 0.325 |
+| hybrid (v4) vs trees (v2), 6 held-out matches | 0.653 vs 0.637 (better on 6 of 6) | |
 
-See `VERSIONS.md` for every version tried and its numbers, and `REPORT.md` for the reading.
+All choices were made on these external evaluations. On the public 5-minute window, scored as a
+check only, v4.2 reaches 0.691 spellF1 (official baseline 0.326).
 
-## Determinism check (RULES.md 3)
+## Rules (RULES.md, FAQ, organisers' mail of 03/11)
 
-The same command must give the same file on every machine. On the reference machine, once:
-
-```
-python changepoint_model/scripts/check_determinism.py --write-reference
-```
-
-On any other machine (fresh venv, `pip install -r changepoint_model/requirements.txt`, data bundle in
-`data/`, ffmpeg on the PATH, optionally the Metrica sample data in `ext/metrica`):
-
-```
-python changepoint_model/scripts/check_determinism.py
-```
-
-It runs four steps twice each (Metrica sample game 3, the provided match without and with the whistle,
-the whistle detection itself) and compares the SHA-256 of every output with
-`determinism_reference.json`. The report in `outputs/determinism/` holds hashes and versions only.
-The numerical libraries are pinned to one thread inside `predict_atd.py`.
+- Inputs: the provided tracking, the Smart Tagging kick-off tag and the audio of the provided
+  video, all read by code. No hand labels, no human-produced data on the provided match, no
+  correction of its tracking.
+- Training and every choice of model or constant: external data or a priori physical constants
+  (metres, seconds). Nothing is trained, fitted or calibrated on the provided match, its video or
+  its ground truth.
+- The two rules come from the Laws of the Game (Law 8: play starts with the kick-off; Law 5: play
+  stops at the referee's whistle). The kick-off rule is a no-op on the external matches, whose
+  periods start at the kick-off. The whistle detector uses the frequency band published for
+  referee whistles in broadcast audio (Raventos et al., SpringerPlus 2015, arXiv 1411.6496); its
+  other constants are a priori physical values (dB, seconds, m/s).

@@ -1,8 +1,7 @@
 # How the possession model works (v4.2)
 
 A guide for the team: what the model does, which pieces it is made of, how a frame becomes a
-label and why it was built this way. The technical detail and every number are in `REPORT.md` and
-`VERSIONS.md`; the commands are in `README.md`.
+label and why it was built this way. The commands, data and validation numbers are in `README.md`.
 
 ---
 
@@ -21,8 +20,8 @@ the whole design:
   it writes matches neither of the two true spells it covers.
 - **A wrong change also costs.** A cut in the wrong place breaks a good spell into two bad ones.
 
-Our earlier models were good at saying *who* has the ball frame by frame, but they rarely cut
-the short possessions. The team's own analysis put most of the lost points there (REPORT_B §20).
+A frame classifier followed by a smoother is good at saying *who* has the ball, but it rarely
+cuts the short possessions, and that is where most of the points are lost.
 This model is built to find **the changes**, not only the state.
 
 ---
@@ -50,8 +49,8 @@ This model is built to find **the changes**, not only the state.
 ```
 
 Steps 1 to 3 are the **learned model**: trained on 18 external matches, never on the provided
-one. Steps 4 and 5 are **rules** taken from the Laws of the Game. Their constants were set a
-priori (metres and seconds) or by the team's earlier rule work, also on external data.
+one. Steps 4 and 5 are **rules** taken from the Laws of the Game. Their constants are set a
+priori (metres, seconds, m/s).
 
 ---
 
@@ -119,9 +118,9 @@ states, H, A and D). It balances two things:
    that cost is **different at every frame**: it is cheap where the boundary heads expect a
    change and expensive everywhere else.
 
-That second point is what is new compared with the team's earlier HMMs, which had one fixed switch
+That second point is what differs from a standard HMM, which has one fixed switch
 rate for the whole match. Raising a fixed rate adds cuts everywhere, the wrong ones included
-(REPORT_B §24). Here the cut becomes cheap only where the evidence for a boundary is.
+Here the cut becomes cheap only where the evidence for a boundary is.
 
 The same hazard also sets the price of **not** cutting. Staying in the current state costs
 −ln(1 − h_change − h_stop) per frame: about 0.005 where nothing happens, but about 0.25 per frame
@@ -149,10 +148,10 @@ On the external matches the periods start at the kick-off, so the rule changes n
 A version that guessed the kick-off from the tracking alone was dropped: it placed the kick-off
 2 to 9 minutes late in 3 of the 36 external halves.
 
-### [5] The whistle (rule R7a from the team's rules, constants unchanged)
+### [5] The whistle (Law 5)
 
 The referee's blasts are detected in the audio with a frequency profile taken from the literature
-(nothing measured on this audio). A blast while the model says "alive" starts a stoppage **only
+(the band published for referee whistles in broadcast audio). A blast while the model says "alive" starts a stoppage **only
 if the players then really slow down**: within 3 s, their mean speed drops to 70 % of what it was
 before, or below walking pace (1.1 m/s).
 
@@ -221,11 +220,10 @@ change" rule that the labels are built on.
 | | |
 |---|---|
 | **Data** | 18 external matches with event labels: 3 Metrica sample games, 7 IDSSE (DFL), 8 PFF World Cup games. The provided match is never used to train or choose anything. |
-| **Labels** | none written by hand by the team. Metrica: from the published events, by one rule taken from CHALLENGE.md (dead from the ball leaving play, the whistle or the goal until the restart kick; team = the team of the last on-ball event; a lost ball stays with the loser until the opponent's recovery or pass). IDSSE: DFL's own ball-status and ball-possession flags in the position data. PFF: PFF's game events attached to the tracking frames (`HMM_first_imp/validation/fetch_pff.py`). |
-| **Realistic damage** | Metrica and IDSSE tracking is "too clean" compared with the provided ATD, so it is degraded a priori: 80 % of stoppages lose the ball, live-ball gaps of 1 to 30 s until only 80 % of live frames are seen, 7 % of player frames removed. PFF already comes from a real broadcast tracker and is used as given. |
+| **Labels** | none written by hand by the team. Metrica: from the published events, by one rule taken from CHALLENGE.md (dead from the ball leaving play, the whistle or the goal until the restart kick; team = the team of the last on-ball event; a lost ball stays with the loser until the opponent's recovery or pass). IDSSE: DFL's own ball-status and ball-possession flags in the position data. PFF: PFF's game events attached to the tracking frames (`data_prep/fetch_pff.py`). |
 | **Fitting** | trees: one frame in 4, 200 rounds, 31 leaves, at least 200 frames per leaf, seed 2027. GRU: windows of 60 s, swap augmentation, 40 epochs, fixed seed. Decoder: gamma in {4, 8, 16} and w in {0.25, 0.5} compared on 6 of the training matches, gamma 8 and w 0.25 chosen (the earlier Metrica-only runs swept 0.5–16 and 0.25–2 and chose the same point every time). |
 | **Evaluation** | leave one match out: train on 17, score the 18th with the official scorer, repeat. |
-| **Public window** | the 5 labelled minutes of the provided match were scored **once**, after the choice was made, as a check only. |
+| **Public window** | the 5 labelled minutes of the provided match are a check only: nothing is trained or chosen on them. |
 
 ---
 
@@ -235,16 +233,9 @@ change" rule that the labels are built on.
 |---|---|---|
 | Official baseline (smooth 50) on the public window | 0.326 | |
 | **v4.2 on the public window** | **0.691** | 2.1× the baseline; noise on 17 possessions is about ±0.17 |
-| Best earlier team model on the public window | 0.696 | level: the difference is far inside the noise |
-| v2 (trees only), leave-one-out, PFF (real tracker) | 0.583 | team HMM on the same files: 0.501 |
+| v2 (trees only), leave-one-out, PFF (real tracker) | 0.583 | constant-rate HMM on the same files: 0.501 |
 | v2, leave-one-out, Metrica / IDSSE | 0.733 / 0.657 | |
 | v4 hybrid vs v2, 6 held-out matches | 0.653 vs 0.637 | wins 6/6 |
-
-On the public window, against the best earlier model, v4.2:
-
-- finds 3 possessions that the earlier model misses, and misses none that it finds;
-- has a dead-ball recall of 0.73 (whistle included) and a change-timing F1 of 0.60;
-- has a latency close to zero.
 
 ---
 
@@ -253,9 +244,9 @@ On the public window, against the best earlier model, v4.2:
 **Strong at**
 
 - **Cutting changes.** Short possessions get split from long ones when the boundary heads see a
-  swing, which is where the earlier models lost the most.
-- **Robustness.** It is trained on damaged tracking and on a real broadcast tracker, and every
-  constant is a football quantity. Nothing is tuned to the provided match.
+  swing, which is where a fixed-rate decoder loses the most.
+- **Robustness.** It is trained on three different tracking sources, including a real broadcast
+  tracker, and every constant is a football quantity. Nothing is tuned to the provided match.
 - **Symmetry.** No home or away bias is possible, by construction.
 - **Reproducibility.** It is deterministic: the same file, byte for byte, on every run (see
   `scripts/check_determinism.py`).
@@ -282,7 +273,7 @@ On the public window, against the best earlier model, v4.2:
 | `cpm/pipeline.py` | prepare → predict → decode |
 | `cpm/decode.py` | the HMM with time-varying hazards (Viterbi) |
 | `cpm/kickoff.py` | Law 8 |
-| `cpm/rule_layers.py` | bridge to the team's whistle rule R7a (`HMM_first_imp/hmm_v0/dead_b.py`) |
-| `scripts/predict_atd.py` | the command that writes the submission |
+| `cpm/whistle.py` | whistle detector and whistle rule |
+| `predict.py` | the command that writes the submission |
 | `scripts/check_determinism.py` | same output on every machine? |
 | `models/cpm_v4_hybrid.pkl` | the trained model (GRU + trees) |

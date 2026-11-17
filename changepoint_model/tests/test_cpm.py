@@ -247,3 +247,17 @@ def test_kickoff_without_tags_changes_nothing():
     out, info = apply_kickoff(lab, m, None)
     assert np.array_equal(out, lab)
     assert all(v["source"] == "none" for v in info.values())
+
+
+def test_whistle_detector_two_tones_only():
+    from cpm.whistle import detect_blasts
+    sr, n_frames = 16000, 400
+    t = np.arange(n_frames * 640) / sr
+    rng = np.random.default_rng(0)
+    pcm = rng.normal(0, 0.05, t.size).astype(np.float32)
+    s, e = 100 * 640, 120 * 640                       # a two-tone whistle, 3750 + 440 Hz, 0.8 s
+    pcm[s:e] += 0.3 * np.sin(2 * np.pi * 3750 * t[s:e]) + 0.25 * np.sin(2 * np.pi * 4190 * t[s:e])
+    s, e = 250 * 640, 270 * 640                       # a single tone: not a whistle
+    pcm[s:e] += 0.3 * np.sin(2 * np.pi * 3750 * t[s:e])
+    blasts = detect_blasts(pcm, n_frames)
+    assert len(blasts) == 1 and 98 <= blasts[0][0] <= 102 and 117 <= blasts[0][1] <= 121

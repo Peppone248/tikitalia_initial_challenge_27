@@ -1,40 +1,30 @@
 r"""Convert the PFF FC / Gradient Sports FIFA World Cup 2022 open data to the same compact .npz as
-validation/fetch_idsse.py, so every IDSSE evaluation script can run on it unchanged.
+data_prep/fetch_idsse.py, so the same loader reads both.
 
-Why this dataset (REPORT_B 17.4, 19): IDSSE is clean optical tracking that we degrade with a SIMULATION
-of the BAR-ATH tracker. PFF is broadcast tracking: every player and ball carries a `visibility` flag,
-VISIBLE or ESTIMATED (off camera, extrapolated). Keeping only VISIBLE gives REAL tracker gaps, not
-simulated ones. Labels come from PFF's own game events (people at PFF, not us, not the rules).
+Why this dataset: IDSSE is clean optical tracking that we degrade with a simulation of an automatic
+tracker. PFF is broadcast tracking: every player and ball carries a `visibility` flag, VISIBLE or
+ESTIMATED (off camera, extrapolated). Keeping only VISIBLE gives real tracker gaps, not simulated
+ones. Labels come from PFF's own game events. Use these games as they are (no further degradation).
 
 The data is not downloaded by this script: register on the PFF FC / Gradient page and unzip the
-download anywhere (default: data/pff/raw/). Then, from the repository root:
+download (changepoint_model/data_prep/unpack_pff.py; default: data/pff/raw/). Then, from the
+repository root:
 
-    python HMM_first_imp/validation/fetch_pff.py --inspect               # structure of ONE game, no output
-    python HMM_first_imp/validation/fetch_pff.py --n 8                   # first 8 games -> data/pff/*.npz
-    python HMM_first_imp/validation/fetch_pff.py --games 3812 10517      # chosen games
-    python HMM_first_imp/validation/fetch_pff.py --list                  # game ids found
-
-It also writes data/pff/validation_pff.yaml (validation_<folder>.yaml for another --out): validation.yaml with data_dir / matches / out_dir pointed
-at the converted games and variants [clean]. NOTE: on PFF the variant 'clean' means "the tracking as
-PFF gives it" (VISIBLE only by default), which is already broadcast-degraded: do NOT run 'degraded' on
-it (that would degrade twice).
-
-    python HMM_first_imp/scripts/run_validation.py --config data/pff/validation_pff.yaml --st-sim \
-        --versions baseline50 c_v3 --variants clean --out-dir outputs/validation_pff
-    # (--config is relative to the current folder, the repository root.) Scripts that call
-    # validation.load_config() without --config (eval_supervised.py, eval_hmm3.py, ...): set
-    $env:MTAH_VALIDATION_CONFIG = "data\pff\validation_pff.yaml"
+    python changepoint_model/data_prep/fetch_pff.py --inspect               # structure of ONE game, no output
+    python changepoint_model/data_prep/fetch_pff.py --n 8                   # first 8 games -> data/pff/*.npz
+    python changepoint_model/data_prep/fetch_pff.py --games 3812 10517      # chosen games
+    python changepoint_model/data_prep/fetch_pff.py --list                  # game ids found
 
 What goes into <game>.npz (fetch_idsse.py fields, resampled from 29.97 to 25 fps by nearest timestamp):
     period          1 / 2 (extra time as 3 / 4: not graded, like IDSSE)
     frame_n         PFF video frame number of the source frame
-    ball_x/y/z      metres, origin at the centre spot (validation.load_idsse shifts it), NaN = not VISIBLE
+    ball_x/y/z      metres, origin at the centre spot, NaN = not VISIBLE
                     (raw positions: at the kick-offs they are 1-1.6 m from the centre spot, the smoothed ones 3 m)
     ball_alive      the label: D where False
     ball_possession 1 = home, 2 = away, 0 = unknown -> the label: H / A
     px, py          (frames, players) metres, NaN where the player is not on the pitch (or not VISIBLE with
-                    --estimated none). Default --estimated players: the broadcast sees ~12 of 22 players, BAR-ATH's
-                    tactical camera almost all, so the extrapolated players are kept and only the ball is VISIBLE-only
+                    --estimated none). Default --estimated players: the broadcast sees ~12 of 22 players, a tactical
+                    camera almost all, so the extrapolated players are kept and only the ball is VISIBLE-only
     player_team     (players,) 0 = home, 1 = away
     pitch_x/pitch_y pitch size in metres (metadata)
   frames with no PFF frame within 0.1 s (missing video) get no positions and label X (not graded)
@@ -347,7 +337,7 @@ def convert(files, source="raw", estimated="players", restart_at="end", limit=No
     restart_s = labels_from_events.restart
     tr["label_stats"] = dict(labels_from_events.stats)
     poss_s = np.where(ung_s, 0, poss_s).astype(np.int8)
-    alive_s = alive_s | ung_s                           # alive + possession 0 -> X in validation.labels_of
+    alive_s = alive_s | ung_s                           # alive + possession 0 -> not graded
     sel, period, gap = resample_index(tr["period"], tr["elapsed"])
     hole = gap > MAX_GAP_S                              # no source frame near this time: nothing seen, not graded
     of, oc, ox, oy = tr["obs"]
@@ -422,20 +412,6 @@ def inspect(games, gid, root, limit):
 
 
 # -- main ------------------------------------------------------------------------------------------
-def write_config(out_dir, games):
-    import yaml
-    with open(os.path.join(HMM_DIR, "config", "validation.yaml"), encoding="utf-8") as h:
-        vc = yaml.safe_load(h)
-    vc.update({"data_dir": os.path.abspath(out_dir), "matches": list(games), "variants": ["clean"],
-               "out_dir": "outputs/validation_" + os.path.basename(os.path.normpath(out_dir))})
-    path = os.path.join(out_dir, "validation_{}.yaml".format(os.path.basename(os.path.normpath(out_dir))))
-    with open(path, "w", encoding="utf-8") as h:
-        h.write("# generated by validation/fetch_pff.py from config/validation.yaml: PFF World Cup 2022.\n"
-                "# 'clean' here = the PFF broadcast tracking as given (already degraded): never run 'degraded'.\n")
-        yaml.safe_dump(vc, h, sort_keys=False, allow_unicode=True)
-    return path
-
-
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--root", default=os.path.join(REPO, "data", "pff", "raw"), help="the unzipped PFF download")
@@ -444,7 +420,7 @@ def main():
     ap.add_argument("--n", type=int, default=8, help="without --games: the first N game ids (sorted)")
     ap.add_argument("--source", choices=("raw", "smoothed"), default="raw")
     ap.add_argument("--estimated", choices=("players", "none", "ball", "both"), default="players",
-                    help="ESTIMATED positions kept. players (default): like BAR-ATH's tactical tracking, players almost "
+                    help="ESTIMATED positions kept. players (default): like a tactical tracking, players almost "
                          "always there, the ball lost often; none: the broadcast worst case (use another --out)")
     ap.add_argument("--restart-at", choices=("end", "start"), default="end")
     ap.add_argument("--force", action="store_true", help="convert again games already in --out")
@@ -486,7 +462,6 @@ def main():
                   "{}/{} matched".format(*_tr["event_file_matched"]) if _tr["event_file_matched"] else "MISSING",
                   time.time() - t0), flush=True)
         done.append(gid)
-    print("config:", write_config(args.out, done))
     print("done: pff ready.")
     return 0
 

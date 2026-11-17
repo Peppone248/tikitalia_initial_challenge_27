@@ -1,10 +1,10 @@
 """Three-state HMM (H, A, D) with minimum durations and *time-varying* transition hazards.
 
-The usual decoder of this project family keeps one constant rate per transition. Here the rate at
-frame t comes from the boundary classifiers: where they see a change of possession the hazard
-rises and a cut becomes cheap; where they see none the state is held. That is how a possession of
-one or two seconds can be cut out of a long one, which a constant-rate HMM never does (REPORT_B 24:
-multiplying the rate everywhere only adds wrong cuts).
+A usual HMM keeps one constant rate per transition. Here the rate at frame t comes from the
+boundary classifiers: where they see a change of possession the hazard rises and a cut becomes
+cheap; where they see none the state is held. That is how a possession of one or two seconds can be
+cut out of a long one, which a constant-rate HMM never does (raising a constant rate everywhere only
+adds wrong cuts).
 
 Emissions: the frame posteriors of the classifiers divided by the class priors (the hybrid
 HMM / classifier convention), to the power w.

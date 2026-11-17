@@ -1,5 +1,7 @@
-> **Team Tikitalia** — this is our team repo. Start from **[TEAM.md](TEAM.md)** (setup, data, layout, workflow).
-> Below is the official challenge README from Metrica Sports, merged from upstream.
+> **Team Tikitalia: our solution is [changepoint_model/](changepoint_model/README.md).**
+> To reproduce the submission: `python changepoint_model/predict.py --out outputs/tikitalia.csv`
+> (setup and details in [changepoint_model/README.md](changepoint_model/README.md)).
+> Below is the official challenge README from Metrica Sports.
 
 # More than a Hack 2027 — Phase 1: Ball Possession
 

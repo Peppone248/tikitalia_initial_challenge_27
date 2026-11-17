@@ -1,8 +1,8 @@
 """Download the IDSSE open dataset (DFL / Sportec, Bundesliga 2022/23, CC-BY 4.0) and convert each
-match to a compact .npz for the validation of HMM_first_imp. Run it on a machine with internet:
+match to a compact .npz for training and validation. Run it on a machine with internet:
 
-    python HMM_first_imp/validation/fetch_idsse.py                 # all 7 matches -> data/idsse/
-    python HMM_first_imp/validation/fetch_idsse.py --matches J03WPY --keep-raw
+    python changepoint_model/data_prep/fetch_idsse.py                 # all 7 matches -> data/idsse/
+    python changepoint_model/data_prep/fetch_idsse.py --matches J03WPY --keep-raw
 
 Needs only the Python standard library + numpy (no kloppy): the positions XML (hundreds of MB per
 match) is parsed as a stream, so memory stays low. The raw XML is deleted after conversion unless
@@ -176,7 +176,7 @@ def main():
     ap.add_argument("--keep-raw", action="store_true")
     ap.add_argument("--events", action="store_true",
                     help="download only the DFL event XML of each match into data/idsse/raw/ (fouls, offsides, "
-                         "free kicks, kick-offs: the moments a referee whistles; REPORT_B 18)")
+                         "free kicks, kick-offs: the moments a referee whistles)")
     args = ap.parse_args()
     raw_dir = os.path.join(args.out, "raw")
     os.makedirs(raw_dir, exist_ok=True)

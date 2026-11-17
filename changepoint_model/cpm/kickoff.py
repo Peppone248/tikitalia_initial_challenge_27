@@ -1,10 +1,9 @@
 """Law 8: play starts with the kick-off. Every frame of a period before its kick-off is D.
 
 Why this exists: in the provided match the second half is graded from video frame 110,808 but
-kicks off at 113,742 (FAQ.md, "One trap worth knowing"): 2,934 graded frames that are all D, with
-players warming up with balls on the pitch. A tracking model sees players near a ball and labels
-possessions. Nothing here types that frame: the kick-off is found by code, the same way on every
-match, from
+kicks off at 113,742 (FAQ.md, "One trap worth knowing"): 2,934 graded frames that are all D, in
+which a tracking model can still see players near a ball. The kick-off is found by code, the same
+way on every match, from
 
 1. the Smart Tagging "Kick Off (Start)" interval of the period (a ~5 s window around the restart,
    DATA.md), refined to the kick inside it: the first frame the ball, seen at rest (less than REST_M
@@ -15,8 +14,8 @@ Without Smart Tagging nothing is changed. A tracking-only detector (both teams i
 ball on the centre spot, kick) was tried and dropped: on the 18 external matches it put the kick-off
 2-9 minutes late in 3 of 36 periods, because that formation also occurs in open play. On the
 external matches the periods start at the kick-off, so the rule is a no-op there by construction.
-Check on the provided match without any label: the kick-off frame printed by predict_atd.py against
-the one published in FAQ.md (113,742 for the second half).
+The kick-off frame found is printed by predict.py and can be compared with the one published in
+FAQ.md (113,742 for the second half).
 
 A kick-off found less than MIN_GAP_S after the start of the period changes nothing (the first half
 of the provided match is graded from its kick-off; the external matches too). Constants are a

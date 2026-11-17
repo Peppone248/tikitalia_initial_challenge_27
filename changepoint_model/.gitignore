@@ -1,9 +1,5 @@
 outputs/
-models/cache/
 __pycache__/
 *.pyc
-# debug helpers, kept local and out of the repository
-scripts/dead_review_list.py
-scripts/dead_review_summary.py
-# the trained models are part of the pipeline (the root .gitignore excludes *.pkl)
+# the trained models are part of the solution (the root .gitignore excludes *.pkl)
 !models/*.pkl

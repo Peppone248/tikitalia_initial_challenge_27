@@ -8,11 +8,11 @@
 
 From the repository root (the zips are only read, never changed or deleted):
 
-    python HMM_first_imp/validation/unpack_pff.py C:/Users/giuse/Downloads/drive-download-20261109T160142Z-1-00*.zip
-    python HMM_first_imp/validation/unpack_pff.py --dry-run <zips...>       # only list what would go where
+    python changepoint_model/data_prep/unpack_pff.py <download folder>/*.zip
+    python changepoint_model/data_prep/unpack_pff.py --dry-run <zips...>    # only list what would go where
 
 A file already there with the same size is skipped, so the command can be run again after an interruption.
-data/ is gitignored: nothing of this reaches git. Then: validation/fetch_pff.py --inspect.
+data/ is gitignored: nothing of this reaches git. Then: data_prep/fetch_pff.py --inspect.
 """
 import argparse
 import collections
@@ -117,7 +117,7 @@ def main():
     others = sorted(r for r in seen if r.startswith("other"))
     if others:
         print("other files (first 15):", others[:15])
-    print("\nnext: python HMM_first_imp/validation/fetch_pff.py --inspect")
+    print("\nnext: python changepoint_model/data_prep/fetch_pff.py --inspect")
     return 0
 
 
