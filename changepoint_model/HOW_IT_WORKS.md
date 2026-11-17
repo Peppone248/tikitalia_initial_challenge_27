@@ -34,7 +34,7 @@ This model is built to find **the changes**, not only the state.
  ──────────────                    ─────────────────────────                    ───────────
 
  tracking (ATD) ─► [1] features ─┬─► [2a] GRU  ──────────► P(home | alive)  ─┐
-                    121 numbers  │                                          │
+                    134 numbers  │                                          │
                     per frame    ├─► [2b] trees ─────────► P(dead)          ├─► [3] HMM decoder ─► H/A/D
                                  │                                          │     (Viterbi)
                                  └─► [2c] trees ─────────► P(change)  ───────┤
@@ -66,15 +66,15 @@ priori (metres and seconds) or by the team's earlier rule work, also on external
 - The two halves come from `games.half_video_blocks()`: those are the graded frames, and
   everything else is X.
 
-### [1] Features: 121 numbers per frame, split into two families
+### [1] Features: 134 numbers per frame, split into two families
 
 The key trick is a symmetry. If you swap home and away (and their attack directions), the answer
 "who has the ball" must flip, but "is the ball dead" must not change.
 
 | family | count | behaviour under the swap | examples | used for |
 |---|---|---|---|---|
-| **odd** | 61 | the sign flips | control vote (closest player within 1.5 m of a ball slower than 8 m/s: +1 home, −1 away) now and averaged over 0.5 / 1 / 2 / 4 s, before and after the frame; pressure at 1 / 3 / 8 m; contacts (ball turns > 30° or changes speed by > 2 m/s); ball position in the attack frame; shape differences (width, length, lines, centroid, speed) | **who** has the ball |
-| **even** | 60 | unchanged | ball seen / seconds since or until it was seen, ball speed, ball out of play; how many players are tracked, how fast they move, share walking; duels; **flip features**: did the control vote change sign across this frame? | **dead ball** and **changes** |
+| **odd** | 66 | the sign flips | control vote (closest player within 1.5 m of a ball slower than 8 m/s: +1 home, −1 away) now and averaged over 0.5 / 1 / 2 / 4 s, before and after the frame; pressure at 1 / 3 / 8 m; contacts (ball turns > 30° or changes speed by > 2 m/s); ball position in the attack frame; shape differences (width, length, lines, centroid, speed) | **who** has the ball |
+| **even** | 68 | unchanged | ball seen / seconds since or until it was seen, ball speed, ball out of play; how many players are tracked, how fast they move, share walking; duels; **flip features**: did the control vote change sign across this frame? | **dead ball** and **changes** |
 
 Because of the symmetry the model cannot learn "home has the ball more often", which would be a
 bias of the training matches. Every constant here is a football quantity (radii, speeds, seconds)
@@ -122,6 +122,11 @@ states, H, A and D). It balances two things:
 That second point is what is new compared with the team's earlier HMMs, which had one fixed switch
 rate for the whole match. Raising a fixed rate adds cuts everywhere, the wrong ones included
 (REPORT_B §24). Here the cut becomes cheap only where the evidence for a boundary is.
+
+The same hazard also sets the price of **not** cutting. Staying in the current state costs
+−ln(1 − h_change − h_stop) per frame: about 0.005 where nothing happens, but about 0.25 per frame
+where P(change) = 0.7. Where a head sees a boundary, the decoder is therefore pushed to cut, and the
+evidence then picks which state comes next.
 
 Hard constraints:
 
@@ -181,17 +186,20 @@ consistent stretch does.
 | 0.2 | 0.064 | 2.8 | ~5 |
 | 0.8 (a change is very likely) | 0.26 | 1.4 | ~3 |
 
-**Example: a quick interception.** Home passes, away intercepts, and 1.2 s later home wins the
-ball back.
+**Example: a one-second touch (Metrica sample game 3, frames 56,500–56,526).** Away has the ball,
+a home player touches it for 26 frames, and away gets it back.
 
-- **What the trees see.** Around the interception the control vote flips sign and P(home) swings
-  across 0.5, so P(change) peaks near 0.8 at the interception and again at the recovery.
-- **The cuts.** Both cuts become cheap, about 1.4 each instead of 8.
-- **The evidence.** The 30 frames in between carry around 0.2 to 0.5 each in favour of A.
-- **The result.** The decoder writes H | A (1.2 s) | H.
+- **What the heads see.** P(home) rises only to about 0.6, but P(change) peaks above 0.8 at both
+  ends of the touch.
+- **The cuts.** Each cut costs about 1.2 instead of 8, and staying with away through the touch
+  would cost about 4.4 over the 26 frames.
+- **The result.** v4 writes A | H (1.0 s) | A, exactly as the truth.
 
-An old fixed-rate HMM would have had to pay about 8 twice for the same short spell, and would
-have kept H throughout. That one short spell is worth two matched possessions to the scorer.
+The same probabilities decoded with a fixed switch cost (6.2 per cut, one change every 20 s) give a
+single away spell of 18.4 s. That spell overlaps the first true away spell with IoU 0.56 and the
+second with 0.36, so the second away spell and the home touch are lost at every threshold. On the
+whole game the fixed-cost decoder predicts 292 possessions against 399 true ones. The game is also
+one of the training matches, so this shows the mechanism, not the score.
 
 **Example: a pass that only looks like a change.** A long ball travels 2 s with nobody in
 control. The votes go quiet, but they do not flip, because the same team receives the ball.
@@ -213,9 +221,9 @@ change" rule that the labels are built on.
 | | |
 |---|---|
 | **Data** | 18 external matches with event labels: 3 Metrica sample games, 7 IDSSE (DFL), 8 PFF World Cup games. The provided match is never used to train or choose anything. |
-| **Labels** | built from each match's events by one rule taken from CHALLENGE.md: dead from the ball leaving play, the whistle or the goal until the restart kick; team = the team of the last on-ball event; a lost ball stays with the loser until the opponent's recovery or pass. |
+| **Labels** | none written by hand by the team. Metrica: from the published events, by one rule taken from CHALLENGE.md (dead from the ball leaving play, the whistle or the goal until the restart kick; team = the team of the last on-ball event; a lost ball stays with the loser until the opponent's recovery or pass). IDSSE: DFL's own ball-status and ball-possession flags in the position data. PFF: PFF's game events attached to the tracking frames (`HMM_first_imp/validation/fetch_pff.py`). |
 | **Realistic damage** | Metrica and IDSSE tracking is "too clean" compared with the provided ATD, so it is degraded a priori: 80 % of stoppages lose the ball, live-ball gaps of 1 to 30 s until only 80 % of live frames are seen, 7 % of player frames removed. PFF already comes from a real broadcast tracker and is used as given. |
-| **Fitting** | trees: 200 rounds, 31 leaves, at least 200 frames per leaf, seed 2027. GRU: windows of 60 s, swap augmentation, fixed seed. The decoder's gamma and w were picked on the training matches, and gamma 8, w 0.25 came out every time. |
+| **Fitting** | trees: one frame in 4, 200 rounds, 31 leaves, at least 200 frames per leaf, seed 2027. GRU: windows of 60 s, swap augmentation, 40 epochs, fixed seed. Decoder: gamma in {4, 8, 16} and w in {0.25, 0.5} compared on 6 of the training matches, gamma 8 and w 0.25 chosen (the earlier Metrica-only runs swept 0.5–16 and 0.25–2 and chose the same point every time). |
 | **Evaluation** | leave one match out: train on 17, score the 18th with the official scorer, repeat. |
 | **Public window** | the 5 labelled minutes of the provided match were scored **once**, after the choice was made, as a check only. |
 
@@ -269,7 +277,7 @@ On the public window, against the best earlier model, v4.2:
 
 | file | what |
 |---|---|
-| `cpm/features.py` | the 121 features |
+| `cpm/features.py` | the 134 features |
 | `cpm/models.py`, `cpm/seq.py` | the trees and the GRU |
 | `cpm/pipeline.py` | prepare → predict → decode |
 | `cpm/decode.py` | the HMM with time-varying hazards (Viterbi) |

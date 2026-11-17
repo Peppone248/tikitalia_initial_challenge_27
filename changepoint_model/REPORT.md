@@ -197,7 +197,7 @@ BAR-ATH: `outputs/cpm_v42/tikitalia.csv`, SHA-256 8682095e..., 292 possessions, 
 | Measured where | leave-one-match-out on the 3 Metrica sample games (each model trained on 2), official scorer, a priori degradation, two seeds; IDSSE and PFF added in §0 |
 | Result | spellF1 **0.747** (degraded, seed 2027; 0.748 seed 2028), 0.808 clean, 0.676 harsh — against 0.325 / 0.400 / 0.248 for the official baseline on the same data; the boundary hazards alone are worth +0.015 degraded over the same HMM with constant rates (3/0 matches), the stacking of P(home)'s trajectory into the boundary heads another +0.017 |
 | What is still missing | 71 % of the true changes found within 2 s; the 1–2 s possessions still only 56–60 %; possessions 1018 / 1133; the GRU heads (v3) are below the boosted trees with only two training matches |
-| Provided match | **not run** here (the data stays on the PC; `scripts/predict_atd.py` is the command, tested end to end on Metrica game 3 in the same EPTS format, deterministic: same SHA-256 on two runs) |
+| Provided match | **not run yet** at this version (`scripts/predict_atd.py` is the command, tested end to end on Metrica game 3 in the same EPTS format, deterministic: same SHA-256 on two runs) |
 
 Comparison with the team's numbers is indirect: the earlier reports used their own degradation
 (`br7+err`), 7 IDSSE + 3 Metrica matches and own tracking. Their best on Metrica (3 matches) was
@@ -281,7 +281,7 @@ Ablations kept off: k = 6 (0.743 / 0.808), k = 25 (0.736 / 0.806), minimum posse
 
 1. **IDSSE + PFF** (15 matches): rerun
    the LOMO, choose v2 vs v3 there, retrain the final model on everything, run `predict_atd.py` on
-   the PC, score the public window once.
+   the provided match, score the public window once.
 2. Hybrid heads: the GRU's P(home) (better team accuracy) with the trees' dead ball and boundaries.
 3. A duration-explicit (semi-Markov) decoder, so that a 1 s possession pays a duration cost instead
    of a chain of forced frames; and separate gamma for the stop / restart hazards (`--gamma-sr`,

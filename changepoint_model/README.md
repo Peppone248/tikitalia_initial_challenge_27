@@ -8,6 +8,9 @@ cover several true ones were cut; §24: raising the HMM's switch rate everywhere
 cuts). The frame-wise classifiers of the earlier models have no notion of a boundary; this module
 gives them one.
 
+**New to the model? Start from [HOW_IT_WORKS.md](HOW_IT_WORKS.md)**: layers, workflow, how a frame
+becomes a label, with worked examples.
+
 ## The idea in one picture
 
 ```text
@@ -68,7 +71,8 @@ tests/                  pytest
 
 ```powershell
 # 0. the referee's whistle from the match audio, with the literature profile (REPORT_B 18 and 31:
-#    the audio is extracted once with ffmpeg into data\, nothing is calibrated on it)
+#    nothing is calibrated on the provided audio). The audio track of the tactical video, once:
+ffmpeg -i data\tactical\BAR-ATH_tactical.mp4 -vn -ac 1 -ar 16000 -c:a flac data\tactical\BAR-ATH_tactical_audio.flac
 .\venv\Scripts\python.exe HMM_first_imp\scripts\detect_whistles.py --profile config_b/whistle_profile_literature.json --out outputs/whistles/BAR-ATH_whistles_lit.json
 # 1. label the provided match: v4 hybrid model + D before each kick-off (Law 8) + whistle R7a
 .\venv\Scripts\python.exe changepoint_model\scripts\predict_atd.py --models changepoint_model\models\cpm_v4_hybrid.pkl --whistle HMM_first_imp\outputs\whistles\BAR-ATH_whistles_lit.json --out outputs\cpm_v42\tikitalia.csv
@@ -96,7 +100,16 @@ weights give the same labels everywhere (numpy forward pass).
 - RULES.md: nothing is trained, tuned or chosen on the provided match or on the public window;
   every constant is a priori or chosen on external matches (leave one match out); corrections
   come out of code applied to the whole match; the data stays out of git.
-- Mail of 03/11: the public window is scored once, after the choice, as a structure check only.
+- Mail of 03/11: the public window is scored once per version, after the choice, as a structure
+  check only (v4, then v4.2).
+- The two rules on top of the model come from the Laws of the Game, not from external data. Law 8
+  (kick-off) is a no-op on the external matches by construction. R7a (whistle) cannot be measured on
+  them: none has audio with labels. It was adopted on Law 5, on a debug pass on the provided video
+  (allowed by RULES.md: watching to debug and design) and on a label-free check printed by
+  `predict_atd.py`; its constants are the team's, unchanged (REPORT_B 18.3). R7b (whistle as a
+  restart) stays off, a decision of the team on label-free statistics of the provided match
+  (REPORT_B 18.4). The whistle profile is written from the literature (REPORT_B 31); the team had
+  measured the provided whistle before writing it, and it falls inside the published band.
 - External data: Metrica sample data (public GitHub repository, README asks for attribution),
   IDSSE (CC BY 4.0), PFF FC World Cup 2022 (registration).
 

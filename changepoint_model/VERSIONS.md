@@ -94,7 +94,7 @@ in its last sub-state (it cycled through re-entries; caught by the synthetic tes
 
 - `predict_atd.py` pins OMP/OpenBLAS/MKL/numba to one thread before numpy is imported: sums happen in
   the same order on every machine. Output unchanged on the public Metrica game 3 (SHA-256 e15b07f4…,
-  same as before the pin; Linux x86-64, numpy 2.5.3, scikit-learn 1.9.1, OpenBLAS).
+  same as before the pin).
 - `scripts/check_determinism.py` + `determinism_reference.json`: four steps (Metrica g3, v4.1, whistle
   blasts, v4.2), two runs each, SHA-256 compared across machines. Labels unchanged: no model or rule
   was touched.

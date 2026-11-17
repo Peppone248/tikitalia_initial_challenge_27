@@ -1,20 +1,23 @@
 {
- "machine": "vm",
+ "machine": "DESKTOP-89LVLRT",
  "env": {
-  "python": "3.13.18",
-  "platform": "Linux-6.18.44-fc-v470-x86_64-with-glibc2.39",
-  "machine": "x86_64",
-  "processor": "x86_64",
-  "numpy": "2.5.3",
-  "sklearn": "1.9.1",
+  "python": "3.10.4",
+  "platform": "Windows-10-10.0.19045-SP0",
+  "machine": "AMD64",
+  "processor": "Intel64 Family 6 Model 158 Stepping 13, GenuineIntel",
+  "numpy": "2.2.6",
+  "sklearn": "1.7.2",
   "numba": "0.68.1",
   "yaml": "6.0.3",
-  "scipy": "1.18.1",
+  "scipy": "1.15.3",
   "blas": "scipy-openblas",
-  "ffmpeg": "ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers"
+  "ffmpeg": "ffmpeg version 9.0.2-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers"
  },
- "time": "2026-11-16 11:53:34",
+ "time": "2026-11-17 19:33:23",
  "sha256": {
+  "v41": "dae859b5d2bf10c68a055fe79f0364c58a30e62e3b61cbacdf32e09a194ee6c3",
+  "whistles": "9eb6a344d3ab6e6da40393742f99e39845d061e77de16342e2c5e4ead1a471c7",
+  "v42": "8682095eaa072212e2b0be95e8acb87713c1f7312d474598ce694e263a04491d",
   "metrica_g3": "e15b07f49ba0c058abd216b5d1f4871c811769e06d8d5c82a66ac14431bc2a45"
  }
 }
